@@ -5,6 +5,7 @@ import { PrismaUserRepository } from "../../database/PrismaUserRepository.js";
 import { PasswordHasher } from "../../services/PasswordHasher.js";
 import { TokenService } from "../../services/TokenService.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
+import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 
 const authRoutes = Router();
 
