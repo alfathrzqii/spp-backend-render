@@ -5,6 +5,7 @@ import authRoutes from "../infrastructure/http/routes/authRoutes.js";
 import sppTariffRoutes from "../infrastructure/http/routes/sppTariffRoutes.js";
 import categoryRoutes from "../infrastructure/http/routes/categoryRoutes.js";
 import studentRoutes from "../infrastructure/http/routes/studentRoutes.js";
+import transactionRoutes from "../infrastructure/http/routes/transactionRoutes.js";
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/spp-tariffs", sppTariffRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
