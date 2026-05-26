@@ -27,4 +27,23 @@ export class PrismaUserRepository implements IUserRepository {
       userData.schoolUnitId
     );
   }
+
+  async findById(id: number): Promise<User | null> {
+    const userData = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!userData) {
+      return null;
+    }
+
+    return new User(
+      userData.id,
+      userData.name,
+      userData.email,
+      userData.password,
+      userData.role,
+      userData.schoolUnitId
+    );
+  }
 }
