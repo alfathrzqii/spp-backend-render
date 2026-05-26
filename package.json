@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "type": "module",
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
@@ -20,7 +21,9 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@types/cookie-parser": "^1.4.10",
     "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
