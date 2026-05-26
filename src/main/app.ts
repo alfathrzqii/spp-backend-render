@@ -6,6 +6,7 @@ import sppTariffRoutes from "../infrastructure/http/routes/sppTariffRoutes.js";
 import categoryRoutes from "../infrastructure/http/routes/categoryRoutes.js";
 import studentRoutes from "../infrastructure/http/routes/studentRoutes.js";
 import transactionRoutes from "../infrastructure/http/routes/transactionRoutes.js";
+import invoiceRoutes from "../infrastructure/http/routes/invoiceRoutes.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/spp-tariffs", sppTariffRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/invoices", invoiceRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

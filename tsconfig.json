@@ -41,5 +41,6 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "typeRoots": ["./node_modules/@types", "./src/@types"]
-  }
+  },
+  "exclude": ["prisma/seed.ts"]
 }
