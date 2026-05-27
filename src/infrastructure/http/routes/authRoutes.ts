@@ -6,6 +6,8 @@ import { PasswordHasher } from "../../services/PasswordHasher.js";
 import { TokenService } from "../../services/TokenService.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { loginSchema } from "../schemas/authSchema.js";
 
 const authRoutes = Router();
 
@@ -15,7 +17,7 @@ const passwordHasher = new PasswordHasher();
 const tokenService = new TokenService();
 const authController = new AuthController(loginUseCase, passwordHasher, tokenService, userRepo);
 
-authRoutes.post("/login", (req, res, next) => authController.login(req, res, next));
+authRoutes.post("/login", validateRequest(loginSchema), (req, res, next) => authController.login(req, res, next));
 authRoutes.get("/me", authMiddleware, (req, res, next) => authController.getMe(req, res, next));
 
 export default authRoutes;

@@ -11,18 +11,10 @@ export class InvoiceController {
   async payOffline(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const user = req.user!;
-      const { studentId, month, year } = req.body;
-
-      if (!studentId || !month || !year) {
-        res.status(400).json({
-          success: false,
-          message: "studentId, month, dan year wajib diisi",
-        });
-        return;
-      }
+      const { studentNumber, month, year } = req.body;
 
       // Multi-unit isolation check
-      const student = await this.studentRepository.findById(Number(studentId));
+      const student = await this.studentRepository.findByStudentNumber(studentNumber);
       if (!student) {
         res.status(404).json({
           success: false,
@@ -42,7 +34,7 @@ export class InvoiceController {
       }
 
       const result = await this.processOfflinePaymentUseCase.execute({
-        studentId: Number(studentId),
+        studentId: student.id,
         month: Number(month),
         year: Number(year),
         recordedById: user.id,
