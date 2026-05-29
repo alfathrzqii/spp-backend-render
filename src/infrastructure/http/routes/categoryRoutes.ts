@@ -7,6 +7,8 @@ import { DeleteCategoryUseCase } from "../../../application/use-cases/DeleteCate
 import { PrismaCategoryRepository } from "../../database/PrismaCategoryRepository.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { categorySchema } from "../schemas/categorySchema.js";
 
 const router = Router();
 
@@ -31,6 +33,7 @@ router.post(
   "/",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(categorySchema),
   categoryController.create.bind(categoryController)
 );
 
@@ -45,6 +48,7 @@ router.put(
   "/:id",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(categorySchema),
   categoryController.update.bind(categoryController)
 );
 
