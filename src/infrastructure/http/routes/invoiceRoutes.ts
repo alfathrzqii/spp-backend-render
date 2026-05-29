@@ -6,6 +6,8 @@ import { PrismaInvoiceRepository } from "../../database/PrismaInvoiceRepository.
 import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
 import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
 
 const router = Router();
 
@@ -32,6 +34,7 @@ router.post(
   "/pay-offline",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(offlinePaymentSchema),
   invoiceController.payOffline.bind(invoiceController)
 );
 

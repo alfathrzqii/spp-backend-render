@@ -6,6 +6,8 @@ import { PrismaTransactionRepository } from "../../database/PrismaTransactionRep
 import { PrismaCategoryRepository } from "../../database/PrismaCategoryRepository.js";
 import { CreateTransactionUseCase } from "../../../application/use-cases/CreateTransactionUseCase.js";
 import { GetTransactionsUseCase } from "../../../application/use-cases/GetTransactionsUseCase.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { createTransactionSchema } from "../schemas/transactionSchema.js";
 
 const router = Router();
 
@@ -28,6 +30,7 @@ router.post(
   "/",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(createTransactionSchema),
   transactionController.create.bind(transactionController)
 );
 

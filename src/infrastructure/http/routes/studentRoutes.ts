@@ -8,6 +8,8 @@ import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffReposit
 import { PasswordHasher } from "../../services/PasswordHasher.js";
 import { CreateStudentUseCase } from "../../../application/use-cases/CreateStudentUseCase.js";
 import { GetStudentsUseCase } from "../../../application/use-cases/GetStudentsUseCase.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { createStudentSchema } from "../schemas/studentSchema.js";
 import { UpdateStudentUseCase } from "../../../application/use-cases/UpdateStudentUseCase.js";
 import { DeleteStudentUseCase } from "../../../application/use-cases/DeleteStudentUseCase.js";
 
@@ -45,6 +47,7 @@ router.post(
   "/",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(createStudentSchema),
   studentController.create.bind(studentController)
 );
 
