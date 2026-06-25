@@ -48,8 +48,8 @@ enum PaymentMethod {
 // ==========================================
 
 model SchoolUnit {
-  id           Int           @id @default(autoincrement())
-  name         String        @db.VarChar(50) // Contoh: "RA", "TK", "SD"
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(50) // Contoh: "RA", "TK", "SD"
 
   // Relasi (Satu Unit Sekolah memiliki banyak relasi di bawah ini)
   users        User[]
@@ -62,31 +62,29 @@ model SchoolUnit {
 }
 
 model User {
-  id           Int         @id @default(autoincrement())
-  name         String      @db.VarChar(255)
-  email        String      @unique @db.VarChar(255)
-  password     String      @db.VarChar(255)
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String?       @unique // Tambahkan tanda tanya (?) agar nullable
+  phoneNumber  String?       @unique // Kolom baru untuk login parent berbasis nomor HP
+  password     String
   role         Role
-  schoolUnitId Int?        @map("school_unit_id")
-
-  // Relasi
-  // Jika Admin Unit dihapus, kita set null agar data transaksi historis tetap aman
-  schoolUnit   SchoolUnit? @relation(fields: [schoolUnitId], references: [id], onDelete: SetNull)
-  students     Student[]   @relation("ParentToStudents")
+  schoolUnitId Int?
+  schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id])
   transactions Transaction[] @relation("RecorderToTransactions")
+  students     Student[]     @relation("ParentToStudents")
 
   @@map("users")
 }
 
 model SppTariff {
-  id             Int        @id @default(autoincrement())
-  schoolUnitId   Int        @map("school_unit_id")
-  enrollmentYear Int        @map("enrollment_year") // Tahun angkatan masuk (contoh: 2024, 2025)
-  amount         Int        // Tarif dasar SPP bulanan dalam Rupiah (Gunakan Int karena IDR tidak memiliki sen)
+  id             Int @id @default(autoincrement())
+  schoolUnitId   Int @map("school_unit_id")
+  enrollmentYear Int @map("enrollment_year") // Tahun angkatan masuk (contoh: 2024, 2025)
+  amount         Int // Tarif dasar SPP bulanan dalam Rupiah (Gunakan Int karena IDR tidak memiliki sen)
 
   // Relasi
   // Jika unit sekolah dihapus, otomatis hapus master tarif terkait
-  schoolUnit     SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
+  schoolUnit SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
 
   // Composite Unique Key: Mencegah duplikasi entri tarif untuk Unit & Angkatan yang sama
   @@unique([schoolUnitId, enrollmentYear], name: "uq_school_unit_enrollment_year")
@@ -94,18 +92,16 @@ model SppTariff {
 }
 
 model Student {
-  id                 Int         @id @default(autoincrement())
-  studentNumber      String      @unique @map("student_number") @db.VarChar(50) // NIS / Nomor Induk Siswa
-  name               String      @db.VarChar(255)
-  schoolUnitId       Int         @map("school_unit_id")
-  parentId           Int         @map("parent_id")
-  enrollmentYear     Int         @map("enrollment_year") // Tahun angkatan masuk
-  discountPercentage Int         @default(0) @map("discount_percentage") // Persentase diskon (0-100)
-
-  // Relasi
-  // Restrict mencegah penghapusan unit/parent jika masih ada data siswa aktif yang terikat dengannya
-  schoolUnit         SchoolUnit  @relation(fields: [schoolUnitId], references: [id], onDelete: Restrict)
-  parent             User        @relation("ParentToStudents", fields: [parentId], references: [id], onDelete: Restrict)
+  id                 Int        @id @default(autoincrement())
+  studentNumber      String     @unique
+  name               String
+  className          String // Kolom baru untuk data kelas (misal: "6A", "TK A1")
+  schoolUnitId       Int
+  schoolUnit         SchoolUnit @relation(fields: [schoolUnitId], references: [id])
+  parentId           Int
+  parent             User       @relation("ParentToStudents", fields: [parentId], references: [id])
+  enrollmentYear     Int
+  discountPercentage Int        @default(0)
   invoices           Invoice[]
 
   @@map("students")
@@ -118,7 +114,7 @@ model Category {
   schoolUnitId Int?         @map("school_unit_id") // Nullable jika kategori ini bersifat global (bisa dipakai semua unit)
 
   // Relasi
-  schoolUnit   SchoolUnit?  @relation(fields: [schoolUnitId], references: [id], onDelete: SetNull)
+  schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id], onDelete: SetNull)
   transactions Transaction[]
 
   @@map("categories")
@@ -132,17 +128,17 @@ model Invoice {
   id              Int           @id @default(autoincrement())
   studentId       Int           @map("student_id")
   invoiceType     InvoiceType   @map("invoice_type")
-  month           Int           // Bulan tagihan (1-12)
-  year            Int           // Tahun tagihan (e.g. 2026)
+  month           Int // Bulan tagihan (1-12)
+  year            Int // Tahun tagihan (e.g. 2026)
   baseAmount      Int           @map("base_amount") // Tarif dasar riil saat tagihan di-generate (snapshot dari spp_tariffs)
   discountApplied Int           @map("discount_applied") // Hasil hitung potongan dalam rupiah
-  amount          Int           // Bersih akhir yang harus dibayarkan siswa (baseAmount - discountApplied)
+  amount          Int // Bersih akhir yang harus dibayarkan siswa (baseAmount - discountApplied)
   status          InvoiceStatus @default(PENDING)
   midtransOrderId String?       @unique @map("midtrans_order_id") @db.VarChar(255)
 
   // Relasi
-  student         Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  transactions    Transaction[]
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
 
   // Composite Unique Key: Mencegah tagihan ganda untuk jenis, bulan, dan tahun yang sama pada siswa yang sama
   @@unique([studentId, month, year, invoiceType], name: "uq_student_billing_period")
@@ -150,22 +146,22 @@ model Invoice {
 }
 
 model Transaction {
-  id           Int           @id @default(autoincrement())
-  date         DateTime      @default(now())
-  type         CategoryType  // INCOME / EXPENSE
-  categoryId   Int           @map("category_id")
-  invoiceId    Int?          @map("invoice_id") // Nullable, terisi hanya jika transaksi ini adalah pelunasan tagihan SPP
+  id            Int           @id @default(autoincrement())
+  date          DateTime      @default(now())
+  type          CategoryType // INCOME / EXPENSE
+  categoryId    Int           @map("category_id")
+  invoiceId     Int?          @map("invoice_id") // Nullable, terisi hanya jika transaksi ini adalah pelunasan tagihan SPP
   paymentMethod PaymentMethod @map("payment_method")
-  amount       Int           // Nominal uang masuk/keluar. (Ganti BigInt jika kalkulasi akumulasi Anda melewati 2.1 miliar)
-  description  String?       @db.Text
-  schoolUnitId Int           @map("school_unit_id")
-  recordedById Int?          @map("recorded_by_id") // Nullable, kosong jika sistem otomatis (seperti webhook Midtrans)
+  amount        Int // Nominal uang masuk/keluar. (Ganti BigInt jika kalkulasi akumulasi Anda melewati 2.1 miliar)
+  description   String?       @db.Text
+  schoolUnitId  Int           @map("school_unit_id")
+  recordedById  Int?          @map("recorded_by_id") // Nullable, kosong jika sistem otomatis (seperti webhook Midtrans)
 
   // Relasi
-  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  schoolUnit   SchoolUnit    @relation(fields: [schoolUnitId], references: [id], onDelete: Restrict)
-  recordedBy   User?         @relation("RecorderToTransactions", fields: [recordedById], references: [id], onDelete: SetNull)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  invoice    Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  schoolUnit SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Restrict)
+  recordedBy User?      @relation("RecorderToTransactions", fields: [recordedById], references: [id], onDelete: SetNull)
 
   @@map("transactions")
 }
