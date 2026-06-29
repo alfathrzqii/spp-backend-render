@@ -17,11 +17,13 @@ export class StudentController {
       const {
         studentNumber,
         name,
+        className,
         schoolUnitId,
         enrollmentYear,
         discountPercentage,
         parentName,
         parentEmail,
+        parentPhoneNumber,
       } = req.body;
 
       // Isolasi unit sekolah untuk UNIT_ADMIN
@@ -35,11 +37,13 @@ export class StudentController {
       const student = await this.createStudentUseCase.execute({
         studentNumber,
         name,
+        className,
         schoolUnitId,
         enrollmentYear,
         discountPercentage,
         parentName,
         parentEmail,
+        parentPhoneNumber,
       });
 
       return res.status(201).json({
@@ -57,19 +61,22 @@ export class StudentController {
 
   async getAll(req: Request, res: Response) {
     try {
-      let { schoolUnitId, search } = req.query;
+      let { schoolUnitId, search, className } = req.query;
 
       // Jika UNIT_ADMIN, paksa schoolUnitId miliknya
       if (req.user?.role === "UNIT_ADMIN") {
         schoolUnitId = req.user.schoolUnitId?.toString();
       }
 
-      const filter: { schoolUnitId?: number; search?: string } = {};
+      const filter: { schoolUnitId?: number; search?: string; className?: string } = {};
       if (schoolUnitId) {
         filter.schoolUnitId = parseInt(schoolUnitId as string);
       }
       if (search) {
         filter.search = search as string;
+      }
+      if (className) {
+        filter.className = className as string;
       }
 
       const students = await this.getStudentsUseCase.execute(filter);

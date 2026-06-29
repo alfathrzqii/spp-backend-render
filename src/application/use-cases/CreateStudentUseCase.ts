@@ -7,11 +7,13 @@ import type { Student } from "../../domain/entities/Student.js";
 export interface CreateStudentRequest {
   studentNumber: string;
   name: string;
+  className: string;
   schoolUnitId: number;
   enrollmentYear: number;
   discountPercentage: number;
   parentName: string;
-  parentEmail: string;
+  parentEmail?: string;
+  parentPhoneNumber: string;
 }
 
 export class CreateStudentUseCase {
@@ -42,11 +44,15 @@ export class CreateStudentUseCase {
       );
     }
 
-    // 3. Periksa akun parent
-    const existingParent = await this.userRepository.findByEmail(data.parentEmail);
+    // 3. Periksa akun parent (berdasarkan nomor HP)
+    const existingParent = await this.userRepository.findByPhoneNumber(
+      data.parentPhoneNumber
+    );
 
     let parentId: number | undefined;
-    let parentDataToCreate: { name: string; email: string; passwordHash: string } | undefined;
+    let parentDataToCreate:
+      | { name: string; email: string; phoneNumber: string; passwordHash: string }
+      | undefined;
 
     if (existingParent) {
       parentId = existingParent.id;
@@ -54,7 +60,8 @@ export class CreateStudentUseCase {
       const passwordHash = await this.passwordHasher.hash("parent123");
       parentDataToCreate = {
         name: data.parentName,
-        email: data.parentEmail,
+        email: data.parentEmail || `${data.parentPhoneNumber}@sekolah.id`, // Fallback email jika tidak ada
+        phoneNumber: data.parentPhoneNumber,
         passwordHash,
       };
     }
@@ -64,10 +71,11 @@ export class CreateStudentUseCase {
       {
         studentNumber: data.studentNumber,
         name: data.name,
+        className: data.className,
         schoolUnitId: data.schoolUnitId,
         enrollmentYear: data.enrollmentYear,
         discountPercentage: data.discountPercentage,
-        parentId: parentId as any, // Will be set in repo if parentDataToCreate is provided
+        parentId: parentId as any,
       },
       parentDataToCreate
     );

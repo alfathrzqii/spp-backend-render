@@ -11,7 +11,12 @@ export class PrismaStudentRepository implements IStudentRepository {
 
   async create(
     studentData: Omit<Student, "id" | "parentId"> & { parentId?: number },
-    parentData?: { name: string; email: string; passwordHash: string }
+    parentData?: {
+      name: string;
+      email: string;
+      phoneNumber: string;
+      passwordHash: string;
+    }
   ): Promise<Student> {
     const result = await this.prisma.$transaction(async (tx) => {
       let finalParentId = studentData.parentId;
@@ -21,6 +26,7 @@ export class PrismaStudentRepository implements IStudentRepository {
           data: {
             name: parentData.name,
             email: parentData.email,
+            phoneNumber: parentData.phoneNumber,
             password: parentData.passwordHash,
             role: "PARENT",
             schoolUnitId: null,
@@ -37,6 +43,7 @@ export class PrismaStudentRepository implements IStudentRepository {
         data: {
           studentNumber: studentData.studentNumber,
           name: studentData.name,
+          className: studentData.className,
           schoolUnitId: studentData.schoolUnitId,
           enrollmentYear: studentData.enrollmentYear,
           discountPercentage: studentData.discountPercentage,
@@ -51,6 +58,7 @@ export class PrismaStudentRepository implements IStudentRepository {
       result.id,
       result.studentNumber,
       result.name,
+      result.className,
       result.schoolUnitId,
       result.parentId,
       result.enrollmentYear,
@@ -61,11 +69,18 @@ export class PrismaStudentRepository implements IStudentRepository {
   async findAll(filter?: {
     schoolUnitId?: number;
     search?: string;
-  }): Promise<(Student & { parent: { name: string; email: string } })[]> {
+    className?: string;
+  }): Promise<
+    (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[]
+  > {
     const where: any = {};
 
     if (filter?.schoolUnitId) {
       where.schoolUnitId = filter.schoolUnitId;
+    }
+
+    if (filter?.className) {
+      where.className = filter.className;
     }
 
     if (filter?.search) {
@@ -82,23 +97,26 @@ export class PrismaStudentRepository implements IStudentRepository {
           select: {
             name: true,
             email: true,
+            phoneNumber: true,
           },
         },
       },
     });
 
-    return students.map((s) => ({
-      ...new Student(
+    return students.map((s) => {
+      const student = new Student(
         s.id,
         s.studentNumber,
         s.name,
+        s.className,
         s.schoolUnitId,
         s.parentId,
         s.enrollmentYear,
         s.discountPercentage
-      ),
-      parent: s.parent,
-    }));
+      );
+
+      return Object.assign(student, { parent: s.parent });
+    });
   }
 
   async findById(id: number): Promise<Student | null> {
@@ -112,6 +130,7 @@ export class PrismaStudentRepository implements IStudentRepository {
       student.id,
       student.studentNumber,
       student.name,
+      student.className,
       student.schoolUnitId,
       student.parentId,
       student.enrollmentYear,
@@ -130,6 +149,7 @@ export class PrismaStudentRepository implements IStudentRepository {
       student.id,
       student.studentNumber,
       student.name,
+      student.className,
       student.schoolUnitId,
       student.parentId,
       student.enrollmentYear,
@@ -150,6 +170,7 @@ export class PrismaStudentRepository implements IStudentRepository {
       updated.id,
       updated.studentNumber,
       updated.name,
+      updated.className,
       updated.schoolUnitId,
       updated.parentId,
       updated.enrollmentYear,

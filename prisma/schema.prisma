@@ -62,11 +62,11 @@ model SchoolUnit {
 }
 
 model User {
-  id           Int           @id @default(autoincrement())
-  name         String
-  email        String?       @unique // Tambahkan tanda tanya (?) agar nullable
-  phoneNumber  String?       @unique // Kolom baru untuk login parent berbasis nomor HP
-  password     String
+  id           Int         @id @default(autoincrement())
+  name         String      @db.VarChar(255)
+  email        String      @unique @db.VarChar(255)
+  phoneNumber  String?     @unique @map("phone_number") @db.VarChar(20)
+  password     String      @db.VarChar(255)
   role         Role
   schoolUnitId Int?
   schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id])
@@ -92,16 +92,19 @@ model SppTariff {
 }
 
 model Student {
-  id                 Int        @id @default(autoincrement())
-  studentNumber      String     @unique
-  name               String
-  className          String // Kolom baru untuk data kelas (misal: "6A", "TK A1")
-  schoolUnitId       Int
-  schoolUnit         SchoolUnit @relation(fields: [schoolUnitId], references: [id])
-  parentId           Int
-  parent             User       @relation("ParentToStudents", fields: [parentId], references: [id])
-  enrollmentYear     Int
-  discountPercentage Int        @default(0)
+  id                 Int         @id @default(autoincrement())
+  studentNumber      String      @unique @map("student_number") @db.VarChar(50) // NIS / Nomor Induk Siswa
+  name               String      @db.VarChar(255)
+  className          String      @map("class_name") @db.VarChar(50)
+  schoolUnitId       Int         @map("school_unit_id")
+  parentId           Int         @map("parent_id")
+  enrollmentYear     Int         @map("enrollment_year") // Tahun angkatan masuk
+  discountPercentage Int         @default(0) @map("discount_percentage") // Persentase diskon (0-100)
+
+  // Relasi
+  // Restrict mencegah penghapusan unit/parent jika masih ada data siswa aktif yang terikat dengannya
+  schoolUnit         SchoolUnit  @relation(fields: [schoolUnitId], references: [id], onDelete: Restrict)
+  parent             User        @relation("ParentToStudents", fields: [parentId], references: [id], onDelete: Restrict)
   invoices           Invoice[]
 
   @@map("students")

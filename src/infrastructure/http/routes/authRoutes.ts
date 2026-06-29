@@ -12,8 +12,8 @@ import { loginSchema } from "../schemas/authSchema.js";
 const authRoutes = Router();
 
 const userRepo = new PrismaUserRepository();
-const loginUseCase = new LoginUseCase(userRepo);
 const passwordHasher = new PasswordHasher();
+const loginUseCase = new LoginUseCase(userRepo, passwordHasher);
 const tokenService = new TokenService();
 const authController = new AuthController(loginUseCase, passwordHasher, tokenService, userRepo);
 

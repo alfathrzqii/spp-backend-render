@@ -7,7 +7,10 @@ export class GetStudentsUseCase {
   async execute(filter?: {
     schoolUnitId?: number;
     search?: string;
-  }): Promise<(Student & { parent: { name: string; email: string } })[]> {
+    className?: string;
+  }): Promise<
+    (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[]
+  > {
     return this.studentRepository.findAll(filter);
   }
 }

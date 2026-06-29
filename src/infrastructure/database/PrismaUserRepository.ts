@@ -22,6 +22,27 @@ export class PrismaUserRepository implements IUserRepository {
       userData.id,
       userData.name,
       userData.email,
+      userData.phoneNumber,
+      userData.password,
+      userData.role,
+      userData.schoolUnitId
+    );
+  }
+
+  async findByPhoneNumber(phoneNumber: string): Promise<User | null> {
+    const userData = await this.prisma.user.findUnique({
+      where: { phoneNumber },
+    });
+
+    if (!userData) {
+      return null;
+    }
+
+    return new User(
+      userData.id,
+      userData.name,
+      userData.email,
+      userData.phoneNumber,
       userData.password,
       userData.role,
       userData.schoolUnitId
@@ -41,6 +62,7 @@ export class PrismaUserRepository implements IUserRepository {
       userData.id,
       userData.name,
       userData.email,
+      userData.phoneNumber,
       userData.password,
       userData.role,
       userData.schoolUnitId

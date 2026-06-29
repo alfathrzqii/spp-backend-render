@@ -14,18 +14,9 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { email, password } = req.body;
+      const { identifier, password } = req.body;
 
-      const user = await this.loginUseCase.execute(email);
-
-      const isPasswordValid = await this.passwordHasher.compare(
-        password,
-        user.password
-      );
-
-      if (!isPasswordValid) {
-        throw new Error("Email atau password salah");
-      }
+      const user = await this.loginUseCase.execute(identifier, password);
 
       const token = this.tokenService.generateToken({
         id: user.id,

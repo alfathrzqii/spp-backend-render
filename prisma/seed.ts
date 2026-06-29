@@ -82,6 +82,7 @@ async function main() {
     create: {
       name: 'Hendra Wijaya (Wali Murid)',
       email: 'parent@test.com',
+      phoneNumber: '081234567890',
       password: defaultPasswordParent,
       role: Role.PARENT,
       schoolUnitId: null,
@@ -174,6 +175,7 @@ async function main() {
     create: {
       studentNumber: 'SD-2024-001',
       name: 'Budi Santoso',
+      className: '6A',
       schoolUnitId: unitSD.id,
       parentId: parent.id,
       enrollmentYear: 2024,
@@ -188,6 +190,7 @@ async function main() {
     create: {
       studentNumber: 'TK-2025-001',
       name: 'Siti Aminah',
+      className: 'TK A1',
       schoolUnitId: unitTK.id,
       parentId: parent.id,
       enrollmentYear: 2025,
