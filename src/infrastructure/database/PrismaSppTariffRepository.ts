@@ -1,13 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
 import { SppTariff } from "../../domain/entities/SppTariff.js";
 
 export class PrismaSppTariffRepository implements ISppTariffRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async create(data: Omit<SppTariff, "id">): Promise<SppTariff> {
     const created = await this.prisma.sppTariff.create({

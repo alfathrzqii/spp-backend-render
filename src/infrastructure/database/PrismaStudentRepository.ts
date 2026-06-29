@@ -1,13 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import { Student } from "../../domain/entities/Student.js";
 
 export class PrismaStudentRepository implements IStudentRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async create(
     studentData: Omit<Student, "id" | "parentId"> & { parentId?: number },

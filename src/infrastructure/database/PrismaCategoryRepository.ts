@@ -1,13 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma.js";
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
 import { Category } from "../../domain/entities/Category.js";
 
 export class PrismaCategoryRepository implements ICategoryRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async create(data: Omit<Category, "id">): Promise<Category> {
     const created = await this.prisma.category.create({

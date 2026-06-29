@@ -42,5 +42,5 @@
     "skipLibCheck": true,
     "typeRoots": ["./node_modules/@types", "./src/@types"]
   },
-  "exclude": ["prisma/seed.ts"]
+  "exclude": ["prisma/seed.ts", "vitest.config.ts"]
 }

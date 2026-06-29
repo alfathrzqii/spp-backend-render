@@ -1,13 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma.js";
 import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
 import { User } from "../../domain/entities/User.js";
 
 export class PrismaUserRepository implements IUserRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async findByEmail(email: string): Promise<User | null> {
     const userData = await this.prisma.user.findUnique({

@@ -1,13 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma.js";
 import type { ITransactionRepository } from "../../domain/repositories/ITransactionRepository.js";
 import { Transaction } from "../../domain/entities/Transaction.js";
 
 export class PrismaTransactionRepository implements ITransactionRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async create(data: Omit<Transaction, "id" | "date">): Promise<Transaction> {
     const created = await this.prisma.transaction.create({

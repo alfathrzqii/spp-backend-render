@@ -14,6 +14,7 @@ npm-debug.log*
 # TypeScript compiled output
 dist/
 build/
+coverage/
 
 # IDE / Editor
 .idea/
