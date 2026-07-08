@@ -68,7 +68,7 @@ model User {
   phoneNumber  String?     @unique @map("phone_number") @db.VarChar(20)
   password     String      @db.VarChar(255)
   role         Role
-  schoolUnitId Int?
+  schoolUnitId Int?        @map("school_unit_id")
   schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id])
   transactions Transaction[] @relation("RecorderToTransactions")
   students     Student[]     @relation("ParentToStudents")
