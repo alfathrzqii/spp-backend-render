@@ -38,4 +38,29 @@ router.post(
   invoiceController.payOffline.bind(invoiceController)
 );
 
+router.get(
+  "/unpaid",
+  authMiddleware,
+  invoiceController.getUnpaid.bind(invoiceController)
+);
+
+router.get(
+  "/class-recap",
+  authMiddleware,
+  roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS"] as any),
+  invoiceController.getClassRecap.bind(invoiceController)
+);
+
+router.get(
+  "/student/:studentNumber",
+  authMiddleware,
+  invoiceController.getStudentInvoices.bind(invoiceController)
+);
+
+router.post(
+  "/pay-online-simulated",
+  authMiddleware,
+  invoiceController.payOnlineSimulated.bind(invoiceController)
+);
+
 export default router;
