@@ -44,6 +44,15 @@ async function main() {
     },
   });
 
+  const unitTPA = await prisma.schoolUnit.upsert({
+    where: { id: 4 },
+    update: {},
+    create: {
+      id: 4,
+      name: 'TPA',
+    },
+  });
+
   console.log('Unit sekolah berhasil disiapkan.');
 
   // 3. Seed Data Master: Users (Pengguna Pengujian)

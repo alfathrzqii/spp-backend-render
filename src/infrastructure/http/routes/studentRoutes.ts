@@ -165,6 +165,19 @@ router.post(
           }
 
           await prisma.$transaction(async (tx) => {
+            // Ensure school unit exists in master data to avoid FK constraint errors
+            const existingUnit = await tx.schoolUnit.findUnique({
+              where: { id: schoolUnitId },
+            });
+            if (!existingUnit) {
+              await tx.schoolUnit.create({
+                data: {
+                  id: schoolUnitId,
+                  name: unitName.toUpperCase() || "UNIT",
+                },
+              });
+            }
+
             let parentUser = await tx.user.findUnique({
               where: { phoneNumber: parentPhoneNumber },
             });
