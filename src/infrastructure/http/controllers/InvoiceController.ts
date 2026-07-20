@@ -679,8 +679,14 @@ export class InvoiceController {
       // Order ID format: SPP-{studentNumber}-{month}-{year}-{timestamp}
       const orderId = `SPP-${student.studentNumber}-${month}-${year}-${Date.now()}`;
 
+      // Map payment method to valid Pakasir method slugs
+      let mappedMethod = paymentMethod.toLowerCase();
+      if (mappedMethod === "mandiri" || mappedMethod === "va_mandiri") mappedMethod = "bni_va";
+      else if (mappedMethod === "bca" || mappedMethod === "va_bca") mappedMethod = "bri_va";
+      else if (mappedMethod === "gopay") mappedMethod = "qris";
+
       // Call Pakasir API
-      const pakasirUrl = `https://app.pakasir.com/api/transactioncreate/${paymentMethod}`;
+      const pakasirUrl = `https://app.pakasir.com/api/transactioncreate/${mappedMethod}`;
       const pakasirPayload = {
         project: projectSlug,
         order_id: orderId,
