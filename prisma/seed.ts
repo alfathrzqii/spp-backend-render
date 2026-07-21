@@ -84,20 +84,6 @@ async function main() {
     },
   });
 
-  // Akun Orang Tua (Wali Murid - schoolUnitId NULL agar fleksibel multi-unit anak)
-  const parent = await prisma.user.upsert({
-    where: { email: 'parent@test.com' },
-    update: {},
-    create: {
-      name: 'Hendra Wijaya (Wali Murid)',
-      email: 'parent@test.com',
-      phoneNumber: '081234567890',
-      password: defaultPasswordParent,
-      role: Role.PARENT,
-      schoolUnitId: null,
-    },
-  });
-
   console.log('Data pengguna default berhasil disiapkan.');
 
   // 4. Seed Data Master: Kategori Transaksi Buku Kas (Categories)
@@ -174,40 +160,6 @@ async function main() {
     },
   });
   console.log('Tarif dasar SPP berhasil disiapkan.');
-
-  // 6. Seed Data Master: Siswa (Student)
-  console.log('Seeding data siswa pengujian...');
-  // Menambahkan anak ke Parent Hendra Wijaya yang bersekolah di SD angkatan 2024 dengan diskon SPP 10%
-  await prisma.student.upsert({
-    where: { studentNumber: 'SD-2024-001' },
-    update: {},
-    create: {
-      studentNumber: 'SD-2024-001',
-      name: 'Budi Santoso',
-      className: '6A',
-      schoolUnitId: unitSD.id,
-      parentId: parent.id,
-      enrollmentYear: 2024,
-      discountPercentage: 10, // Dapat potongan diskon 10%
-    },
-  });
-
-  // Menambahkan anak kedua ke Parent Hendra Wijaya yang bersekolah di TK angkatan 2025 tanpa diskon
-  await prisma.student.upsert({
-    where: { studentNumber: 'TK-2025-001' },
-    update: {},
-    create: {
-      studentNumber: 'TK-2025-001',
-      name: 'Siti Aminah',
-      className: 'TK A1',
-      schoolUnitId: unitTK.id,
-      parentId: parent.id,
-      enrollmentYear: 2025,
-      discountPercentage: 0,
-    },
-  });
-
-  console.log('Data siswa pengujian berhasil disiapkan.');
 
   console.log('🔄 Menyinkronkan database sequence auto-increment...');
 
