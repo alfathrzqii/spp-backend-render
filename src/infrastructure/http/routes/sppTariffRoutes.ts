@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middleware/validateRequest.js";
-import { sppTariffSchema } from "../schemas/sppTariffSchema.js";
+import { sppTariffSchema, updateSppTariffSchema } from "../schemas/sppTariffSchema.js";
 import { SppTariffController } from "../controllers/SppTariffController.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
 import { CreateSppTariffUseCase } from "../../../application/use-cases/CreateSppTariffUseCase.js";
@@ -33,7 +33,7 @@ const sppTariffController = new SppTariffController(
 router.post(
   "/",
   authMiddleware,
-  roleMiddleware(["SUPER_ADMIN"]),
+  roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
   validateRequest(sppTariffSchema),
   sppTariffController.create.bind(sppTariffController)
 );
@@ -48,16 +48,18 @@ router.get(
 router.put(
   "/:id",
   authMiddleware,
-  roleMiddleware(["SUPER_ADMIN"]),
-  validateRequest(sppTariffSchema),
+  roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
+  validateRequest(updateSppTariffSchema),
   sppTariffController.update.bind(sppTariffController)
 );
 
 router.delete(
   "/:id",
   authMiddleware,
-  roleMiddleware(["SUPER_ADMIN"]),
+  roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
   sppTariffController.delete.bind(sppTariffController)
 );
 
 export default router;
+
+
