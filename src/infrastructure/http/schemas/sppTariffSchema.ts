@@ -17,3 +17,15 @@ export const sppTariffSchema = z.object({
       .positive({ message: "ID unit sekolah harus positif" }),
   }),
 });
+
+export const updateSppTariffSchema = z.object({
+  body: z.object({
+    amount: z
+      .number({ required_error: "Nominal tarif SPP wajib diisi" })
+      .int({ message: "Nominal harus berupa angka integer" })
+      .positive({ message: "Nominal harus lebih besar dari 0" }),
+    enrollmentYear: z.number().optional(),
+    schoolUnitId: z.number().optional(),
+  }),
+});
+
