@@ -102,6 +102,33 @@ router.put(
 );
 
 router.delete(
+  "/wipe-all-dummy-data",
+  authMiddleware,
+  roleMiddleware(["SUPER_ADMIN"]),
+  async (req, res, next) => {
+    try {
+      const delTx = await prisma.transaction.deleteMany({});
+      const delInv = await prisma.invoice.deleteMany({});
+      const delSt = await prisma.student.deleteMany({});
+      const delUsers = await prisma.user.deleteMany({
+        where: {
+          role: {
+            notIn: ["SUPER_ADMIN", "UNIT_ADMIN"],
+          },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Seluruh data berhasil dibersihkan (${delSt.count} siswa, ${delInv.count} tagihan, ${delTx.count} transaksi, ${delUsers.count} akun ortu)`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.delete(
   "/:id",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
