@@ -175,6 +175,23 @@ export class PrismaStudentRepository implements IStudentRepository {
   }
 
   async delete(id: number): Promise<void> {
+    // 1. Delete transactions linked to student's invoices
+    await this.prisma.transaction.deleteMany({
+      where: {
+        invoice: {
+          studentId: id,
+        },
+      },
+    });
+
+    // 2. Delete invoices linked to student
+    await this.prisma.invoice.deleteMany({
+      where: {
+        studentId: id,
+      },
+    });
+
+    // 3. Delete student record
     await this.prisma.student.delete({
       where: { id },
     });
