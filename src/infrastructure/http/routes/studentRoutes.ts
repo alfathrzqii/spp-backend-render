@@ -101,6 +101,8 @@ router.put(
   studentController.update.bind(studentController)
 );
 
+
+
 router.delete(
   "/:id",
   authMiddleware,

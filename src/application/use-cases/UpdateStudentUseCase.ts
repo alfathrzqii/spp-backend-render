@@ -7,7 +7,17 @@ export class UpdateStudentUseCase {
 
   async execute(
     id: number,
-    data: { name?: string; discountPercentage?: number },
+    data: {
+      name?: string;
+      className?: string;
+      schoolUnitId?: number;
+      enrollmentYear?: number;
+      discountPercentage?: number;
+      birthDate?: string | null;
+      parentName?: string;
+      parentEmail?: string | null;
+      parentPhoneNumber?: string;
+    },
     user: { role: string; schoolUnitId: number | null }
   ): Promise<Student> {
     const student = await this.studentRepository.findById(id);

@@ -35,14 +35,16 @@ export class CreateStudentUseCase {
     }
 
     // 2. Cek ketersediaan tarif dasar
-    const tariff = await this.sppTariffRepository.findByUnitAndYear(
+    let tariff = await this.sppTariffRepository.findByUnitAndYear(
       data.schoolUnitId,
       data.enrollmentYear
     );
     if (!tariff) {
-      throw new NotFoundError(
-        "Gagal: Tarif dasar SPP untuk unit dan angkatan ini belum dikonfigurasi"
-      );
+      tariff = await this.sppTariffRepository.create({
+        schoolUnitId: data.schoolUnitId,
+        enrollmentYear: data.enrollmentYear,
+        amount: 150000,
+      });
     }
 
     // 3. Periksa akun parent (berdasarkan nomor HP)

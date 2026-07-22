@@ -21,7 +21,17 @@ export interface IStudentRepository {
   findByStudentNumber(studentNumber: string): Promise<Student | null>;
   update(
     id: number,
-    data: Partial<Pick<Student, "name" | "discountPercentage">>
+    data: {
+      name?: string;
+      className?: string;
+      schoolUnitId?: number;
+      enrollmentYear?: number;
+      discountPercentage?: number;
+      birthDate?: string | null;
+      parentName?: string;
+      parentEmail?: string | null;
+      parentPhoneNumber?: string;
+    }
   ): Promise<Student>;
   delete(id: number): Promise<void>;
 }

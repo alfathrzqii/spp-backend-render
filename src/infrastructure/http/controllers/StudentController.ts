@@ -89,11 +89,31 @@ export class StudentController {
   async update(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params as { id: string };
-      const { name, discountPercentage } = req.body;
+      const {
+        name,
+        className,
+        schoolUnitId,
+        enrollmentYear,
+        discountPercentage,
+        birthDate,
+        parentName,
+        parentEmail,
+        parentPhoneNumber,
+      } = req.body;
 
       const student = await this.updateStudentUseCase.execute(
         parseInt(id),
-        { name, discountPercentage },
+        {
+          name,
+          className,
+          schoolUnitId,
+          enrollmentYear,
+          discountPercentage,
+          birthDate,
+          parentName,
+          parentEmail,
+          parentPhoneNumber,
+        },
         req.user!
       );
 

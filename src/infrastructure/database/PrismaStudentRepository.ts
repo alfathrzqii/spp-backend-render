@@ -155,11 +155,56 @@ export class PrismaStudentRepository implements IStudentRepository {
 
   async update(
     id: number,
-    data: Partial<Pick<Student, "name" | "discountPercentage">>
+    data: {
+      name?: string;
+      className?: string;
+      schoolUnitId?: number;
+      enrollmentYear?: number;
+      discountPercentage?: number;
+      birthDate?: string | null;
+      parentName?: string;
+      parentEmail?: string | null;
+      parentPhoneNumber?: string;
+    }
   ): Promise<Student> {
+    const {
+      name,
+      className,
+      schoolUnitId,
+      enrollmentYear,
+      discountPercentage,
+      birthDate,
+      parentName,
+      parentEmail,
+      parentPhoneNumber,
+    } = data;
+
+    const studentData: any = {};
+    if (name !== undefined) studentData.name = name;
+    if (className !== undefined) studentData.className = className;
+    if (enrollmentYear !== undefined) studentData.enrollmentYear = enrollmentYear;
+    if (discountPercentage !== undefined) studentData.discountPercentage = discountPercentage;
+    if (schoolUnitId !== undefined) {
+      studentData.schoolUnit = {
+        connect: { id: schoolUnitId }
+      };
+    }
+
+    const parentUpdateData: any = {};
+    if (parentName !== undefined) parentUpdateData.name = parentName;
+    if (parentEmail !== undefined) parentUpdateData.email = parentEmail;
+    if (parentPhoneNumber !== undefined) parentUpdateData.phoneNumber = parentPhoneNumber;
+
     const updated = await this.prisma.student.update({
       where: { id },
-      data,
+      data: {
+        ...studentData,
+        ...(Object.keys(parentUpdateData).length > 0 && {
+          parent: {
+            update: parentUpdateData,
+          },
+        }),
+      },
     });
 
     return new Student(
