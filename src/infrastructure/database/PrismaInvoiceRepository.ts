@@ -58,9 +58,28 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         });
       }
 
+      // Ensure 'SPP' income category exists in database to prevent FK constraint violation
+      let category = await tx.category.findFirst({
+        where: {
+          name: { equals: "SPP", mode: "insensitive" },
+          type: "INCOME",
+        },
+      });
+
+      if (!category) {
+        category = await tx.category.create({
+          data: {
+            name: "SPP",
+            type: "INCOME",
+            schoolUnitId: null,
+          },
+        });
+      }
+
       const transaction = await tx.transaction.create({
         data: {
           ...transactionData,
+          categoryId: category.id, // Use dynamically verified category ID
           invoiceId: invoice.id,
         },
       });
