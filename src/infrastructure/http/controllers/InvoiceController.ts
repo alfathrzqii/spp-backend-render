@@ -26,6 +26,14 @@ export class InvoiceController {
         }
       }
 
+      if (Number(year) < student.enrollmentYear || (Number(year) === student.enrollmentYear && Number(month) < 7)) {
+        res.status(400).json({
+          success: false,
+          message: "Akses ditolak: Tagihan tidak tersedia untuk periode sebelum siswa terdaftar",
+        });
+        return;
+      }
+
       const result = await this.processOfflinePaymentUseCase.execute({
         studentId: student.id,
         month: Number(month),
@@ -106,6 +114,10 @@ export class InvoiceController {
         const discountApplied = Math.floor((baseAmount * student.discountPercentage) / 100);
         const netAmount = baseAmount - discountApplied;
 
+        if (year < student.enrollmentYear) {
+          continue;
+        }
+
         const dbInvoices = await prisma.invoice.findMany({
           where: {
             studentId: student.id,
@@ -119,7 +131,8 @@ export class InvoiceController {
         let totalUnpaidAmount = 0;
         const unpaidMonthsList = [];
 
-        for (let m = 1; m <= upToMonth; m++) {
+        const startMonth = year === student.enrollmentYear ? 7 : 1;
+        for (let m = startMonth; m <= upToMonth; m++) {
           const inv = dbInvoices.find((i) => i.month === m);
           if (!inv) {
             totalUnpaidMonths++;
@@ -289,6 +302,10 @@ export class InvoiceController {
           const discountApplied = Math.floor((baseAmount * student.discountPercentage) / 100);
           const netAmount = baseAmount - discountApplied;
 
+          if (year < student.enrollmentYear) {
+            continue;
+          }
+
           const dbInvoices = await prisma.invoice.findMany({
             where: {
               studentId: student.id,
@@ -301,7 +318,8 @@ export class InvoiceController {
           let studentUnpaidMonths = 0;
           let studentUnpaidAmount = 0;
 
-          for (let m = 1; m <= upToMonth; m++) {
+          const startMonth = year === student.enrollmentYear ? 7 : 1;
+          for (let m = startMonth; m <= upToMonth; m++) {
             const inv = dbInvoices.find((i) => i.month === m);
             if (!inv) {
               studentUnpaidMonths++;
@@ -427,6 +445,17 @@ export class InvoiceController {
       const discountApplied = Math.floor((baseAmount * student.discountPercentage) / 100);
       const netAmount = baseAmount - discountApplied;
 
+      if (year < student.enrollmentYear) {
+        res.status(200).json({
+          success: true,
+          message: "Daftar invoice SPP siswa berhasil diambil",
+          data: [],
+          allInvoices: [],
+          student,
+        });
+        return;
+      }
+
       const dbInvoices = await prisma.invoice.findMany({
         where: { studentId: student.id, year },
         include: {
@@ -437,8 +466,9 @@ export class InvoiceController {
         orderBy: { month: "asc" },
       });
 
-      const invoices = Array.from({ length: 12 }, (_, i) => {
-        const month = i + 1;
+      const startMonth = year === student.enrollmentYear ? 7 : 1;
+      const invoices = Array.from({ length: 12 - startMonth + 1 }, (_, i) => {
+        const month = startMonth + i;
         const existing = dbInvoices.find(
           (inv) => inv.month === month && inv.invoiceType === ("SPP" as any)
         );
@@ -512,6 +542,14 @@ export class InvoiceController {
         }
       }
 
+      if (Number(year) < student.enrollmentYear || (Number(year) === student.enrollmentYear && Number(month) < 7)) {
+        res.status(400).json({
+          success: false,
+          message: "Akses ditolak: Tagihan tidak tersedia untuk periode sebelum siswa terdaftar",
+        });
+        return;
+      }
+
       const existingInvoice = await prisma.invoice.findUnique({
         where: {
           uq_student_billing_period: {
@@ -580,10 +618,26 @@ export class InvoiceController {
           });
         }
 
+        let category = await tx.category.findFirst({
+          where: {
+            name: { equals: "SPP", mode: "insensitive" },
+            type: "INCOME",
+          },
+        });
+        if (!category) {
+          category = await tx.category.create({
+            data: {
+              name: "SPP",
+              type: "INCOME",
+              schoolUnitId: null,
+            },
+          });
+        }
+
         const transaction = await tx.transaction.create({
           data: {
             type: "INCOME" as any,
-            categoryId: 1,
+            categoryId: category.id,
             paymentMethod: "MIDTRANS" as any,
             amount: amountToPay,
             description: `Pembayaran SPP online (simulasi Midtrans) bulan ${month} tahun ${year} untuk siswa ${student.name}`,
@@ -629,6 +683,14 @@ export class InvoiceController {
 
       if (!student) {
         res.status(404).json({ success: false, message: "Siswa tidak ditemukan" });
+        return;
+      }
+
+      if (Number(year) < student.enrollmentYear || (Number(year) === student.enrollmentYear && Number(month) < 7)) {
+        res.status(400).json({
+          success: false,
+          message: "Akses ditolak: Tagihan tidak tersedia untuk periode sebelum siswa terdaftar",
+        });
         return;
       }
 
@@ -844,10 +906,26 @@ export class InvoiceController {
           });
 
           if (!existingTx) {
+            let category = await tx.category.findFirst({
+              where: {
+                name: { equals: "SPP", mode: "insensitive" },
+                type: "INCOME",
+              },
+            });
+            if (!category) {
+              category = await tx.category.create({
+                data: {
+                  name: "SPP",
+                  type: "INCOME",
+                  schoolUnitId: null,
+                },
+              });
+            }
+
             await tx.transaction.create({
               data: {
                 type: "INCOME" as any,
-                categoryId: 1,
+                categoryId: category.id,
                 paymentMethod: "MIDTRANS" as any,
                 amount: invoice.amount,
                 description: `Pembayaran SPP online (Pakasir) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
@@ -914,10 +992,26 @@ export class InvoiceController {
           data: { status: "PAID" as any },
         });
 
+        let category = await tx.category.findFirst({
+          where: {
+            name: { equals: "SPP", mode: "insensitive" },
+            type: "INCOME",
+          },
+        });
+        if (!category) {
+          category = await tx.category.create({
+            data: {
+              name: "SPP",
+              type: "INCOME",
+              schoolUnitId: null,
+            },
+          });
+        }
+
         await tx.transaction.create({
           data: {
             type: "INCOME" as any,
-            categoryId: 1,
+            categoryId: category.id,
             paymentMethod: "MIDTRANS" as any,
             amount: Number(amount) || invoice.amount,
             description: `Pembayaran SPP online (Pakasir Webhook) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
@@ -986,10 +1080,26 @@ export class InvoiceController {
               data: { status: "PAID" as any },
             });
 
+            let category = await tx.category.findFirst({
+              where: {
+                name: { equals: "SPP", mode: "insensitive" },
+                type: "INCOME",
+              },
+            });
+            if (!category) {
+              category = await tx.category.create({
+                data: {
+                  name: "SPP",
+                  type: "INCOME",
+                  schoolUnitId: null,
+                },
+              });
+            }
+
             await tx.transaction.create({
               data: {
                 type: "INCOME" as any,
-                categoryId: 1,
+                categoryId: category.id,
                 paymentMethod: "MIDTRANS" as any,
                 amount: Number(amount) || invoice.amount,
                 description: `Pembayaran SPP online (Simulasi Pakasir Lokal) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
