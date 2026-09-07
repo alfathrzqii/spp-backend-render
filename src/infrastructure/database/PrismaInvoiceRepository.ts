@@ -1,26 +1,45 @@
-import { type InvoiceType, type InvoiceStatus, type CategoryType, type PaymentMethod } from "@prisma/client";
+import type { InvoiceStatus, InvoiceType, CategoryType, PaymentMethod } from "../../domain/enums/index.js";
 import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import { Invoice } from "../../domain/entities/Invoice.js";
 import prisma from "./prisma.js";
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
   private prisma = prisma;
+
+  private mapToDomain(inv: any): Invoice {
+    return new Invoice(
+      inv.id,
+      inv.studentId,
+      inv.invoiceType as InvoiceType,
+      inv.month,
+      inv.year,
+      inv.baseAmount,
+      inv.discountApplied,
+      inv.amount,
+      inv.status as InvoiceStatus,
+      inv.midtransOrderId
+    );
+  }
 
   async findByUniqueComposite(
     studentId: number,
     month: number,
     year: number,
     invoiceType: InvoiceType
-  ): Promise<any | null> {
-    return await this.prisma.invoice.findUnique({
+  ): Promise<Invoice | null> {
+    const inv = await this.prisma.invoice.findUnique({
       where: {
         uq_student_billing_period: {
           studentId,
           month,
           year,
-          invoiceType,
+          invoiceType: invoiceType as any,
         },
       },
     });
+
+    if (!inv) return null;
+    return this.mapToDomain(inv);
   }
 
   async createOfflinePayment(
@@ -44,17 +63,17 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       recordedById: number;
     },
     existingInvoiceId?: number
-  ): Promise<any> {
+  ): Promise<{ invoice: Invoice; transaction: any }> {
     return await this.prisma.$transaction(async (tx) => {
-      let invoice;
+      let rawInvoice: any;
       if (existingInvoiceId) {
-        invoice = await tx.invoice.update({
+        rawInvoice = await tx.invoice.update({
           where: { id: existingInvoiceId },
-          data: { status: invoiceData.status },
+          data: { status: invoiceData.status as any },
         });
       } else {
-        invoice = await tx.invoice.create({
-          data: invoiceData,
+        rawInvoice = await tx.invoice.create({
+          data: invoiceData as any,
         });
       }
 
@@ -86,12 +105,12 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       const transaction = await tx.transaction.create({
         data: {
           ...transactionData,
-          categoryId: category.id, // Use dynamically verified category ID
-          invoiceId: invoice.id,
+          categoryId: category.id,
+          invoiceId: rawInvoice.id,
         },
       });
 
-      return { invoice, transaction };
+      return { invoice: this.mapToDomain(rawInvoice), transaction };
     });
   }
 }

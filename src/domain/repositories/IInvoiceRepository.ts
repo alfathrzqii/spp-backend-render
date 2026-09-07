@@ -1,4 +1,5 @@
-import type { InvoiceStatus, InvoiceType, PaymentMethod, CategoryType } from "@prisma/client";
+import type { InvoiceStatus, InvoiceType, PaymentMethod, CategoryType } from "../enums/index.js";
+import type { Invoice } from "../entities/Invoice.js";
 
 export interface IInvoiceRepository {
   findByUniqueComposite(
@@ -6,7 +7,7 @@ export interface IInvoiceRepository {
     month: number,
     year: number,
     invoiceType: InvoiceType
-  ): Promise<any | null>;
+  ): Promise<Invoice | null>;
 
   createOfflinePayment(
     invoiceData: {
@@ -29,5 +30,5 @@ export interface IInvoiceRepository {
       recordedById: number;
     },
     existingInvoiceId?: number
-  ): Promise<any>;
+  ): Promise<{ invoice: Invoice; transaction: any }>;
 }

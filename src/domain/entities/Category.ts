@@ -1,4 +1,4 @@
-import type { CategoryType } from "@prisma/client";
+import type { CategoryType } from "../enums/CategoryType.js";
 
 export class Category {
   constructor(

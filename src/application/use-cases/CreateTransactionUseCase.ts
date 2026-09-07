@@ -1,7 +1,7 @@
 import type { ITransactionRepository } from "../../domain/repositories/ITransactionRepository.js";
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
 import type { Transaction } from "../../domain/entities/Transaction.js";
-import type { CategoryType, PaymentMethod } from "@prisma/client";
+import type { CategoryType, PaymentMethod } from "../../domain/enums/index.js";
 import { BadRequestError } from "../../domain/errors/AppError.js";
 
 export class CreateTransactionUseCase {

@@ -1,4 +1,4 @@
-import type { CategoryType, PaymentMethod } from "@prisma/client";
+import type { CategoryType, PaymentMethod } from "../enums/index.js";
 
 export class Transaction {
   constructor(
