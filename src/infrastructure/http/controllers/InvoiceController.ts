@@ -103,11 +103,14 @@ export class InvoiceController {
         where.className = { not: "PPDB" };
       }
 
+      const invoiceType = ((req.query.invoiceType as string) || "SPP").toUpperCase();
+
       const students = await prisma.student.findMany({
         where,
         include: {
           schoolUnit: { select: { name: true } },
           parent: { select: { name: true, phoneNumber: true, email: true } },
+          sdExtracurriculars: true,
         },
         orderBy: { name: "asc" },
       });
@@ -126,92 +129,337 @@ export class InvoiceController {
 
         if (!tariff) continue;
 
-        const baseAmount = tariff.amount;
-        const discountApplied = Math.min(baseAmount, student.discountAmount);
-        const netAmount = baseAmount - discountApplied;
+        // 1. SPP Bulanan
+        if (invoiceType === "SPP") {
+          const baseAmount = tariff.amount;
+          const discountApplied = Math.min(baseAmount, student.discountAmount);
+          const netAmount = baseAmount - discountApplied;
 
-        if (year < student.enrollmentYear) {
-          continue;
-        }
+          if (year < student.enrollmentYear) {
+            continue;
+          }
 
-        const dbInvoices = await prisma.invoice.findMany({
-          where: {
-            studentId: student.id,
-            invoiceType: "SPP" as any,
-            year,
-            month: { lte: upToMonth },
-          },
-        });
+          const dbInvoices = await prisma.invoice.findMany({
+            where: {
+              studentId: student.id,
+              invoiceType: "SPP" as any,
+              year,
+              month: { lte: upToMonth },
+            },
+          });
 
-        let totalUnpaidMonths = 0;
-        let totalUnpaidAmount = 0;
-        const unpaidMonthsList = [];
+          let totalUnpaidMonths = 0;
+          let totalUnpaidAmount = 0;
+          const unpaidMonthsList = [];
 
-        let startMonth = 1;
-        if (year === student.enrollmentYear) {
-          startMonth = 7;
-        } else if (year === 2026) {
-          startMonth = 7;
-        }
-        for (let m = startMonth; m <= upToMonth; m++) {
-          const inv = dbInvoices.find((i) => i.month === m);
-          if (!inv) {
-            if (netAmount > 0) {
-              totalUnpaidMonths++;
-              totalUnpaidAmount += netAmount;
-              unpaidMonthsList.push({
-                month: m,
-                status: "PENDING",
-                totalAmount: netAmount,
-                unpaidAmount: netAmount,
+          let startMonth = 1;
+          if (year === student.enrollmentYear) {
+            startMonth = 7;
+          } else if (year === 2026) {
+            startMonth = 7;
+          }
+          for (let m = startMonth; m <= upToMonth; m++) {
+            const inv = dbInvoices.find((i) => i.month === m);
+            if (!inv) {
+              if (netAmount > 0) {
+                totalUnpaidMonths++;
+                totalUnpaidAmount += netAmount;
+                unpaidMonthsList.push({
+                  month: m,
+                  status: "PENDING",
+                  totalAmount: netAmount,
+                  unpaidAmount: netAmount,
+                });
+              }
+            } else if ((inv.status as any) === "PENDING") {
+              if (netAmount > 0) {
+                totalUnpaidMonths++;
+                totalUnpaidAmount += netAmount;
+                unpaidMonthsList.push({
+                  month: m,
+                  status: "PENDING",
+                  totalAmount: netAmount,
+                  unpaidAmount: netAmount,
+                });
+              }
+            } else if ((inv.status as any) === "PARTIALLY_PAID") {
+              const txSum = await prisma.transaction.aggregate({
+                where: { invoiceId: inv.id, type: "INCOME" as any },
+                _sum: { amount: true },
               });
-            }
-          } else if ((inv.status as any) === "PENDING") {
-            if (netAmount > 0) {
-              totalUnpaidMonths++;
-              totalUnpaidAmount += netAmount;
-              unpaidMonthsList.push({
-                month: m,
-                status: "PENDING",
-                totalAmount: netAmount,
-                unpaidAmount: netAmount,
-              });
-            }
-          } else if ((inv.status as any) === "PARTIALLY_PAID") {
-            const txSum = await prisma.transaction.aggregate({
-              where: { invoiceId: inv.id, type: "INCOME" as any },
-              _sum: { amount: true },
-            });
-            const paid = txSum._sum.amount || 0;
-            const unpaidPart = Math.max(0, inv.amount - paid);
-            if (unpaidPart > 0) {
-              totalUnpaidMonths++;
-              totalUnpaidAmount += unpaidPart;
-              unpaidMonthsList.push({
-                month: m,
-                status: "PARTIALLY_PAID",
-                totalAmount: inv.amount,
-                unpaidAmount: unpaidPart,
-              });
+              const paid = txSum._sum.amount || 0;
+              const unpaidPart = Math.max(0, inv.amount - paid);
+              if (unpaidPart > 0) {
+                totalUnpaidMonths++;
+                totalUnpaidAmount += unpaidPart;
+                unpaidMonthsList.push({
+                  month: m,
+                  status: "PARTIALLY_PAID",
+                  totalAmount: inv.amount,
+                  unpaidAmount: unpaidPart,
+                });
+              }
             }
           }
-        }
 
-        if (totalUnpaidMonths > 0) {
-          unpaidList.push({
-            id: student.id,
-            studentNumber: student.studentNumber,
-            name: student.name,
-            className: student.className,
-            schoolUnitId: student.schoolUnitId,
-            schoolUnitName: student.schoolUnit.name,
-            parentName: student.parent?.name || "-",
-            parentPhoneNumber: student.parent?.phoneNumber || "-",
-            parentEmail: student.parent?.email || null,
-            unpaidMonths: unpaidMonthsList,
-            totalUnpaidAmount,
-            totalUnpaidCount: totalUnpaidMonths,
+          if (totalUnpaidMonths > 0) {
+            unpaidList.push({
+              id: student.id,
+              studentNumber: student.studentNumber,
+              name: student.name,
+              className: student.className,
+              schoolUnitId: student.schoolUnitId,
+              schoolUnitName: student.schoolUnit.name,
+              parentName: student.parent?.name || "-",
+              parentPhoneNumber: student.parent?.phoneNumber || "-",
+              parentEmail: student.parent?.email || null,
+              invoiceType: "SPP",
+              totalAmount: netAmount * totalUnpaidMonths,
+              paidAmount: 0,
+              unpaidAmount: totalUnpaidAmount,
+              status: unpaidMonthsList.some(m => m.status === "PARTIALLY_PAID") ? "PARTIALLY_PAID" : "PENDING",
+              unpaidMonths: unpaidMonthsList,
+              totalUnpaidAmount,
+              totalUnpaidCount: totalUnpaidMonths,
+            });
+          }
+        } else if (invoiceType === "FULLDAY") {
+          // 2. FULLDAY Bulanan
+          if (!student.isFullday) continue;
+          if (year < student.enrollmentYear) continue;
+
+          let fulldayFee = 0;
+          if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
+            const ft = await (prisma as any).fulldayTariff.findUnique({
+              where: {
+                uq_fullday_school_unit_enrollment_year: {
+                  schoolUnitId: student.schoolUnitId,
+                  enrollmentYear: student.enrollmentYear,
+                },
+              },
+            });
+            if (ft) {
+              fulldayFee = ft.monthlyFee;
+            }
+          }
+
+          if (fulldayFee <= 0) continue;
+
+          const dbInvoices = await prisma.invoice.findMany({
+            where: {
+              studentId: student.id,
+              invoiceType: "FULLDAY" as any,
+              year,
+              month: { lte: upToMonth },
+            },
           });
+
+          let totalUnpaidMonths = 0;
+          let totalUnpaidAmount = 0;
+          const unpaidMonthsList = [];
+
+          let startMonth = 1;
+          if (year === student.enrollmentYear) {
+            startMonth = 7;
+          } else if (year === 2026) {
+            startMonth = 7;
+          }
+
+          for (let m = startMonth; m <= upToMonth; m++) {
+            const inv = dbInvoices.find((i) => i.month === m);
+            if (!inv) {
+              totalUnpaidMonths++;
+              totalUnpaidAmount += fulldayFee;
+              unpaidMonthsList.push({
+                month: m,
+                status: "PENDING",
+                totalAmount: fulldayFee,
+                unpaidAmount: fulldayFee,
+              });
+            } else if ((inv.status as any) === "PENDING") {
+              totalUnpaidMonths++;
+              totalUnpaidAmount += fulldayFee;
+              unpaidMonthsList.push({
+                month: m,
+                status: "PENDING",
+                totalAmount: fulldayFee,
+                unpaidAmount: fulldayFee,
+              });
+            } else if ((inv.status as any) === "PARTIALLY_PAID") {
+              const txSum = await prisma.transaction.aggregate({
+                where: { invoiceId: inv.id, type: "INCOME" as any },
+                _sum: { amount: true },
+              });
+              const paid = txSum._sum.amount || 0;
+              const unpaidPart = Math.max(0, inv.amount - paid);
+              if (unpaidPart > 0) {
+                totalUnpaidMonths++;
+                totalUnpaidAmount += unpaidPart;
+                unpaidMonthsList.push({
+                  month: m,
+                  status: "PARTIALLY_PAID",
+                  totalAmount: inv.amount,
+                  unpaidAmount: unpaidPart,
+                });
+              }
+            }
+          }
+
+          if (totalUnpaidMonths > 0) {
+            unpaidList.push({
+              id: student.id,
+              studentNumber: student.studentNumber,
+              name: student.name,
+              className: student.className,
+              schoolUnitId: student.schoolUnitId,
+              schoolUnitName: student.schoolUnit.name,
+              parentName: student.parent?.name || "-",
+              parentPhoneNumber: student.parent?.phoneNumber || "-",
+              parentEmail: student.parent?.email || null,
+              invoiceType: "FULLDAY",
+              totalAmount: fulldayFee * totalUnpaidMonths,
+              paidAmount: 0,
+              unpaidAmount: totalUnpaidAmount,
+              status: unpaidMonthsList.some(m => m.status === "PARTIALLY_PAID") ? "PARTIALLY_PAID" : "PENDING",
+              unpaidMonths: unpaidMonthsList,
+              totalUnpaidAmount,
+              totalUnpaidCount: totalUnpaidMonths,
+            });
+          }
+        } else {
+          // 3. Non-Monthly (UANG_PENGEMBANGAN, EKSTRAKURIKULER, DAFTAR_ULANG, UANG_PERALATAN, SERAGAM)
+          let baseAmount = 0;
+          let discountApplied = 0;
+
+          if (invoiceType === "UANG_PENGEMBANGAN") {
+            if (year < student.enrollmentYear) continue;
+            baseAmount = tariff.developmentFee || 0;
+            discountApplied = 0;
+          } else if (invoiceType === "DAFTAR_ULANG") {
+            if (year < student.enrollmentYear) continue;
+            baseAmount = tariff.reRegistrationFee || 0;
+            discountApplied = 0;
+          } else if (invoiceType === "SERAGAM") {
+            if (year < student.enrollmentYear) continue;
+            baseAmount = tariff.uniformFee || 0;
+            discountApplied = 0;
+          } else if (invoiceType === "UANG_PERALATAN") {
+            if (year < student.enrollmentYear) continue;
+            let equipFee = 0;
+            if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
+              const level = student.schoolUnitId === 1 
+                ? "KB" 
+                : (student.className.trim().toUpperCase().charAt(0) === "B" ? "B" : "A");
+              const extraTariff = await prisma.extraEquipmentTariff.findUnique({
+                where: {
+                  uq_school_unit_enrollment_year_level: {
+                    schoolUnitId: student.schoolUnitId,
+                    enrollmentYear: student.enrollmentYear,
+                    level,
+                  },
+                },
+              });
+              if (extraTariff) {
+                if (student.registrationStatus === "BARU") {
+                  equipFee = extraTariff.equipmentFeeNew || extraTariff.equipmentFee;
+                } else if (student.registrationStatus === "NAIK_KELAS") {
+                  equipFee = extraTariff.equipmentFeePromotion || extraTariff.equipmentFee;
+                } else if (student.registrationStatus === "TINGGAL_KELAS") {
+                  equipFee = extraTariff.equipmentFeeRepeat || extraTariff.equipmentFee;
+                } else {
+                  equipFee = extraTariff.equipmentFeeNew || extraTariff.equipmentFee;
+                }
+              }
+            }
+            baseAmount = equipFee;
+            discountApplied = Math.min(baseAmount, student.discountEquipment || 0);
+          } else if (invoiceType === "EKSTRAKURIKULER") {
+            if (year < student.enrollmentYear) continue;
+            let extraFee = 0;
+            if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
+              const level = student.schoolUnitId === 1 
+                ? "KB" 
+                : (student.className.trim().toUpperCase().charAt(0) === "B" ? "B" : "A");
+              const extraTariff = await prisma.extraEquipmentTariff.findUnique({
+                where: {
+                  uq_school_unit_enrollment_year_level: {
+                    schoolUnitId: student.schoolUnitId,
+                    enrollmentYear: student.enrollmentYear,
+                    level,
+                  },
+                },
+              });
+              if (extraTariff) {
+                if (student.registrationStatus === "BARU") {
+                  extraFee = extraTariff.extracurricularFeeNew || extraTariff.extracurricularFee;
+                } else if (student.registrationStatus === "NAIK_KELAS") {
+                  extraFee = extraTariff.extracurricularFeePromotion || extraTariff.extracurricularFee;
+                } else if (student.registrationStatus === "TINGGAL_KELAS") {
+                  extraFee = extraTariff.extracurricularFeeRepeat || extraTariff.extracurricularFee;
+                } else {
+                  extraFee = extraTariff.extracurricularFeeNew || extraTariff.extracurricularFee;
+                }
+              }
+            } else if (student.schoolUnitId === 3) {
+              if (student.sdExtracurriculars && student.sdExtracurriculars.length > 0) {
+                extraFee = student.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
+              }
+            }
+            baseAmount = extraFee;
+            discountApplied = Math.min(baseAmount, student.discountExtracurricular || 0);
+          }
+
+          const netAmount = Math.max(0, baseAmount - discountApplied);
+          if (netAmount <= 0) continue;
+
+          // Target billing year: enrollmentYear for UANG_PENGEMBANGAN & SERAGAM, or selected year for annual fees
+          const targetYear = (invoiceType === "UANG_PENGEMBANGAN" || invoiceType === "SERAGAM")
+            ? student.enrollmentYear
+            : year;
+
+          const dbInvoice = await prisma.invoice.findFirst({
+            where: {
+              studentId: student.id,
+              invoiceType: invoiceType as any,
+              year: targetYear,
+            },
+            include: {
+              transactions: {
+                where: { type: "INCOME" as any },
+              },
+            },
+          });
+
+          let paidAmount = 0;
+          if (dbInvoice) {
+            paidAmount = dbInvoice.transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+          }
+
+          const unpaidAmount = Math.max(0, netAmount - paidAmount);
+          if (unpaidAmount > 0) {
+            const status = paidAmount > 0 ? "PARTIALLY_PAID" : "PENDING";
+            unpaidList.push({
+              id: student.id,
+              studentNumber: student.studentNumber,
+              name: student.name,
+              className: student.className,
+              schoolUnitId: student.schoolUnitId,
+              schoolUnitName: student.schoolUnit.name,
+              parentName: student.parent?.name || "-",
+              parentPhoneNumber: student.parent?.phoneNumber || "-",
+              parentEmail: student.parent?.email || null,
+              invoiceType,
+              baseAmount,
+              discountApplied,
+              totalAmount: netAmount,
+              paidAmount,
+              unpaidAmount,
+              status,
+              unpaidMonths: [],
+              totalUnpaidAmount: unpaidAmount,
+              totalUnpaidCount: 1,
+            });
+          }
         }
       }
 
@@ -234,8 +482,9 @@ export class InvoiceController {
 
       res.status(200).json({
         success: true,
-        message: "Laporan tunggakan SPP berhasil diambil",
+        message: `Laporan tunggakan ${invoiceType} berhasil diambil`,
         data: {
+          invoiceType,
           unpaidList,
           summary,
         },
@@ -2057,7 +2306,7 @@ export class InvoiceController {
 
   async getAllInvoices(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { schoolUnitId, className, status, month, year, search, page = "1", limit = "50" } = req.query;
+      const { schoolUnitId, className, status, month, year, search, invoiceType, page = "1", limit = "50" } = req.query;
 
       const filter: any = {};
 
@@ -2079,6 +2328,10 @@ export class InvoiceController {
           { name: { contains: search as string, mode: "insensitive" } },
           { studentNumber: { contains: search as string } }
         ];
+      }
+
+      if (invoiceType) {
+        filter.invoiceType = invoiceType as any;
       }
 
       if (status) {
