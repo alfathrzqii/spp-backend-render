@@ -78,9 +78,10 @@ describe('ProcessOfflinePaymentUseCase', () => {
       month: 5,
       year: 2023,
       amount: 450000,
-      status: InvoiceStatus.UNPAID
+      status: InvoiceStatus.PENDING
     };
-    mockInvoiceRepository.findByUniqueComposite.mockResolvedValue(existingInvoice);
+    mockInvoiceRepository.findByUniqueComposite.mockResolvedValue(existingInvoice as any);
+    mockInvoiceRepository.getPaidAmount.mockResolvedValue(0);
     mockStudentRepository.findById.mockResolvedValue(mockStudent);
 
     const mockResult = {

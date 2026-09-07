@@ -5,9 +5,15 @@ import { InvoiceController } from "../controllers/InvoiceController.js";
 import { PrismaInvoiceRepository } from "../../database/PrismaInvoiceRepository.js";
 import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
+import { PrismaExtraEquipmentTariffRepository } from "../../database/PrismaExtraEquipmentTariffRepository.js";
+import { PrismaFulldayTariffRepository } from "../../database/PrismaFulldayTariffRepository.js";
 import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
+import { GetAllInvoicesUseCase } from "../../../application/use-cases/GetAllInvoicesUseCase.js";
+import { UpdateInvoiceStatusUseCase } from "../../../application/use-cases/UpdateInvoiceStatusUseCase.js";
+import { DeleteInvoiceUseCase } from "../../../application/use-cases/DeleteInvoiceUseCase.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
+import prisma from "../../database/prisma.js";
 
 const router = Router();
 
@@ -15,18 +21,28 @@ const router = Router();
 const invoiceRepo = new PrismaInvoiceRepository();
 const studentRepo = new PrismaStudentRepository();
 const sppTariffRepo = new PrismaSppTariffRepository();
+const extraEquipmentTariffRepo = new PrismaExtraEquipmentTariffRepository();
+const fulldayTariffRepo = new PrismaFulldayTariffRepository(prisma);
 
 // Use Cases
 const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
   invoiceRepo,
   studentRepo,
-  sppTariffRepo
+  sppTariffRepo,
+  extraEquipmentTariffRepo,
+  fulldayTariffRepo
 );
+const getAllInvoicesUseCase = new GetAllInvoicesUseCase(invoiceRepo);
+const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, sppTariffRepo);
+const deleteInvoiceUseCase = new DeleteInvoiceUseCase(invoiceRepo);
 
 // Controller
 const invoiceController = new InvoiceController(
   processOfflinePaymentUseCase,
-  studentRepo
+  studentRepo,
+  getAllInvoicesUseCase,
+  updateInvoiceStatusUseCase,
+  deleteInvoiceUseCase
 );
 
 // Routes

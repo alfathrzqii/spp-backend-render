@@ -1,15 +1,18 @@
 import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
+import type { IExtraEquipmentTariffRepository } from "../../domain/repositories/IExtraEquipmentTariffRepository.js";
+import type { IFulldayTariffRepository } from "../../domain/repositories/IFulldayTariffRepository.js";
 import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from "../../domain/enums/index.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
-import prisma from "../../infrastructure/database/prisma.js";
 
 export class ProcessOfflinePaymentUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
     private studentRepository: IStudentRepository,
-    private sppTariffRepository: ISppTariffRepository
+    private sppTariffRepository: ISppTariffRepository,
+    private extraEquipmentTariffRepository?: IExtraEquipmentTariffRepository,
+    private fulldayTariffRepository?: IFulldayTariffRepository
   ) {}
 
   async execute(input: {
@@ -73,19 +76,15 @@ export class ProcessOfflinePaymentUseCase {
       baseAmount = tariff.reRegistrationFee;
     } else if (invoiceType === InvoiceType.UANG_PERALATAN) {
       let equipFee = 0;
-      if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
+      if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.extraEquipmentTariffRepository) {
         const level = student.schoolUnitId === 1 
           ? "KB" 
           : (student.className.trim().toUpperCase().charAt(0) === "B" ? "B" : "A");
-        const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-          where: {
-            uq_school_unit_enrollment_year_level: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-              level,
-            },
-          },
-        });
+        const extraTariff = await this.extraEquipmentTariffRepository.findByUnitYearAndLevel(
+          student.schoolUnitId,
+          student.enrollmentYear,
+          level
+        );
         if (extraTariff) {
           if (student.registrationStatus === "BARU") {
             equipFee = extraTariff.equipmentFeeNew || extraTariff.equipmentFee;
@@ -102,19 +101,15 @@ export class ProcessOfflinePaymentUseCase {
       discountApplied = Math.min(baseAmount, student.discountEquipment || 0);
     } else if (invoiceType === InvoiceType.EKSTRAKURIKULER) {
       let extraFee = 0;
-      if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
+      if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.extraEquipmentTariffRepository) {
         const level = student.schoolUnitId === 1 
           ? "KB" 
           : (student.className.trim().toUpperCase().charAt(0) === "B" ? "B" : "A");
-        const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-          where: {
-            uq_school_unit_enrollment_year_level: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-              level,
-            },
-          },
-        });
+        const extraTariff = await this.extraEquipmentTariffRepository.findByUnitYearAndLevel(
+          student.schoolUnitId,
+          student.enrollmentYear,
+          level
+        );
         if (extraTariff) {
           if (student.registrationStatus === "BARU") {
             extraFee = extraTariff.extracurricularFeeNew || extraTariff.extracurricularFee;
@@ -127,12 +122,8 @@ export class ProcessOfflinePaymentUseCase {
           }
         }
       } else if (student.schoolUnitId === 3) {
-        const fullStudent = await prisma.student.findUnique({
-          where: { id: student.id },
-          include: { sdExtracurriculars: true },
-        });
-        if (fullStudent && fullStudent.sdExtracurriculars) {
-          extraFee = fullStudent.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
+        if (student.sdExtracurriculars) {
+          extraFee = student.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
         }
       }
       baseAmount = extraFee;
@@ -141,15 +132,11 @@ export class ProcessOfflinePaymentUseCase {
       baseAmount = tariff.uniformFee;
     } else if (invoiceType === InvoiceType.FULLDAY) {
       let fulldayFee = 0;
-      if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
-        const ft = await (prisma as any).fulldayTariff.findUnique({
-          where: {
-            uq_fullday_school_unit_enrollment_year: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-            },
-          },
-        });
+      if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.fulldayTariffRepository) {
+        const ft = await this.fulldayTariffRepository.findByUnitAndYear(
+          student.schoolUnitId,
+          student.enrollmentYear
+        );
         if (ft) {
           fulldayFee = ft.monthlyFee;
         }
@@ -162,11 +149,7 @@ export class ProcessOfflinePaymentUseCase {
     // Hitung berapa yang sudah dibayar
     let currentPaid = 0;
     if (existingInvoice) {
-      const txSum = await prisma.transaction.aggregate({
-        where: { invoiceId: existingInvoice.id, type: "INCOME" as any },
-        _sum: { amount: true },
-      });
-      currentPaid = txSum._sum.amount || 0;
+      currentPaid = await this.invoiceRepository.getPaidAmount(existingInvoice.id);
     }
 
     const targetInvoiceAmount = (existingInvoice && existingInvoice.status !== InvoiceStatus.PENDING)
@@ -212,7 +195,6 @@ export class ProcessOfflinePaymentUseCase {
       }
     }
 
-    // 3. Eksekusi Kategori Pembayaran Dinamis
     let categoryName = "SPP";
     if (invoiceType === InvoiceType.UANG_PENGEMBANGAN) categoryName = "Uang Pengembangan";
     else if (invoiceType === InvoiceType.DAFTAR_ULANG) categoryName = "Daftar Ulang";
@@ -221,27 +203,9 @@ export class ProcessOfflinePaymentUseCase {
     else if (invoiceType === InvoiceType.SERAGAM) categoryName = "Uang Seragam";
     else if (invoiceType === InvoiceType.FULLDAY) categoryName = "Uang Fullday";
 
-    let category = await prisma.category.findFirst({
-      where: {
-        name: { equals: categoryName, mode: "insensitive" },
-        type: "INCOME",
-      },
-    });
-
-    if (!category) {
-      category = await prisma.category.create({
-        data: {
-          name: categoryName,
-          type: "INCOME",
-          schoolUnitId: null,
-        },
-      });
-    }
-
     const isTransfer = paymentMethod === PaymentMethod.TRANSFER;
     const transactionData = {
       type: CategoryType.INCOME,
-      categoryId: category.id,
       paymentMethod,
       amount: paymentTxAmount,
       description: `Pembayaran ${categoryName} offline ${isTransfer ? "transfer bank" : "tunai"} bulan ${month} tahun ${year} untuk siswa ${student.name}`,
