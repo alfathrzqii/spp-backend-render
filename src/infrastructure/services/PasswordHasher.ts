@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
+import type { IPasswordHasher } from "../../application/ports/IPasswordHasher.js";
 
-export class PasswordHasher {
+export class PasswordHasher implements IPasswordHasher {
   async compare(plain: string, hashed: string): Promise<boolean> {
     return bcrypt.compare(plain, hashed);
   }

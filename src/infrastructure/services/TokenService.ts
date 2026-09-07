@@ -1,14 +1,9 @@
 import jwt from "jsonwebtoken";
-import type { Role } from "@prisma/client";
+import type { ITokenService, TokenPayload } from "../../application/ports/ITokenService.js";
 
-export interface TokenPayload {
-  id: number;
-  email: string;
-  role: Role;
-  schoolUnitId: number | null;
-}
+export type { TokenPayload };
 
-export class TokenService {
+export class TokenService implements ITokenService {
   private readonly secret: string;
 
   constructor() {

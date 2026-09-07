@@ -1,15 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
 import { UnauthorizedError } from "../../../domain/errors/AppError.js";
 import type { LoginUseCase } from "../../../application/use-cases/LoginUseCase.js";
-import type { PasswordHasher } from "../../services/PasswordHasher.js";
-import type { TokenService } from "../../services/TokenService.js";
+import type { IPasswordHasher, ITokenService } from "../../../application/ports/index.js";
 import type { IUserRepository } from "../../../domain/repositories/IUserRepository.js";
 
 export class AuthController {
   constructor(
     private loginUseCase: LoginUseCase,
-    private passwordHasher: PasswordHasher,
-    private tokenService: TokenService,
+    private passwordHasher: IPasswordHasher,
+    private tokenService: ITokenService,
     private userRepository: IUserRepository
   ) {}
 
