@@ -80,4 +80,6 @@ export interface IInvoiceRepository {
     source: string,
     paymentMethod?: PaymentMethod
   ): Promise<void>;
+  deletePendingByStudentId(studentId: number): Promise<void>;
 }
+
