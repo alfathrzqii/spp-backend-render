@@ -2,6 +2,9 @@ import type { Request, Response, NextFunction } from "express";
 import prisma from "../../database/prisma.js";
 import { ForbiddenError, NotFoundError } from "../../../domain/errors/AppError.js";
 import type { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
+import type { GetAllInvoicesUseCase } from "../../../application/use-cases/GetAllInvoicesUseCase.js";
+import type { UpdateInvoiceStatusUseCase } from "../../../application/use-cases/UpdateInvoiceStatusUseCase.js";
+import type { DeleteInvoiceUseCase } from "../../../application/use-cases/DeleteInvoiceUseCase.js";
 import type { IStudentRepository } from "../../../domain/repositories/IStudentRepository.js";
 import { logger } from "../../services/WinstonLogger.js";
 
@@ -9,7 +12,10 @@ import { logger } from "../../services/WinstonLogger.js";
 export class InvoiceController {
   constructor(
     private processOfflinePaymentUseCase: ProcessOfflinePaymentUseCase,
-    private studentRepository: IStudentRepository
+    private studentRepository: IStudentRepository,
+    private getAllInvoicesUseCase?: GetAllInvoicesUseCase,
+    private updateInvoiceStatusUseCase?: UpdateInvoiceStatusUseCase,
+    private deleteInvoiceUseCase?: DeleteInvoiceUseCase
   ) {}
 
   async payOffline(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -2324,6 +2330,25 @@ export class InvoiceController {
       const { id } = req.params as { id: string };
       const { status, paymentMethod } = req.body;
 
+      if (this.updateInvoiceStatusUseCase) {
+        let method: any = "CASH";
+        if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
+          method = "TRANSFER";
+        }
+        const updatedInvoice = await this.updateInvoiceStatusUseCase.execute({
+          invoiceId: parseInt(id),
+          status,
+          paymentMethod: method,
+          recordedById: req.user?.id,
+        });
+        res.status(200).json({
+          success: true,
+          message: "Status tagihan berhasil diperbarui",
+          data: updatedInvoice,
+        });
+        return;
+      }
+
       if (!status || !["PAID", "PENDING"].includes(status)) {
         res.status(400).json({ success: false, message: "Status tidak valid. Gunakan PAID atau PENDING." });
         return;
@@ -2434,6 +2459,15 @@ export class InvoiceController {
     try {
       const { id } = req.params as { id: string };
 
+      if (this.deleteInvoiceUseCase) {
+        await this.deleteInvoiceUseCase.execute(parseInt(id));
+        res.status(200).json({
+          success: true,
+          message: "Tagihan dan seluruh riwayat pembayarannya berhasil dihapus",
+        });
+        return;
+      }
+
       const invoice = await prisma.invoice.findUnique({
         where: { id: parseInt(id) },
       });
@@ -2465,6 +2499,34 @@ export class InvoiceController {
   async getAllInvoices(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { schoolUnitId, className, status, month, year, search, invoiceType, page = "1", limit = "50" } = req.query;
+
+      if (this.getAllInvoicesUseCase) {
+        let parsedSchoolUnitId: number | undefined;
+        if (req.user?.role === "UNIT_ADMIN") {
+          parsedSchoolUnitId = req.user.schoolUnitId ?? undefined;
+        } else if (schoolUnitId) {
+          parsedSchoolUnitId = parseInt(schoolUnitId as string);
+        }
+
+        const result = await this.getAllInvoicesUseCase.execute({
+          schoolUnitId: parsedSchoolUnitId,
+          className: className as string | undefined,
+          status: status as any,
+          month: month ? parseInt(month as string) : undefined,
+          year: year ? parseInt(year as string) : undefined,
+          search: search as string | undefined,
+          invoiceType: invoiceType as any,
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        });
+
+        res.status(200).json({
+          success: true,
+          data: result.invoices,
+          pagination: result.pagination,
+        });
+        return;
+      }
 
       const filter: any = {};
 
@@ -2544,3 +2606,4 @@ export class InvoiceController {
     }
   }
 }
+
