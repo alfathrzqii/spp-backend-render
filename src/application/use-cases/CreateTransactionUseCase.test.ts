@@ -4,7 +4,7 @@ import { mockDeep } from 'vitest-mock-extended';
 import type { ITransactionRepository } from '../../domain/repositories/ITransactionRepository.js';
 import type { ICategoryRepository } from '../../domain/repositories/ICategoryRepository.js';
 import { Transaction } from '../../domain/entities/Transaction.js';
-import { CategoryType, PaymentMethod } from '@prisma/client';
+import { CategoryType, PaymentMethod } from '../../domain/enums/index.js';
 
 describe('CreateTransactionUseCase', () => {
   let createTransactionUseCase: CreateTransactionUseCase;

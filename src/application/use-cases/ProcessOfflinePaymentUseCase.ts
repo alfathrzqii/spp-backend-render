@@ -1,7 +1,7 @@
 import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
-import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from "@prisma/client";
+import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from "../../domain/enums/index.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
 import prisma from "../../infrastructure/database/prisma.js";
 

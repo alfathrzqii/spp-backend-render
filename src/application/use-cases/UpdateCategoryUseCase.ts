@@ -1,6 +1,6 @@
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
 import { Category } from "../../domain/entities/Category.js";
-import type { CategoryType } from "@prisma/client";
+import type { CategoryType } from "../../domain/enums/CategoryType.js";
 import { NotFoundError } from "../../domain/errors/AppError.js";
 
 export class UpdateCategoryUseCase {

@@ -1,12 +1,20 @@
-export class AppError extends Error {
-  public readonly statusCode: number;
+export class DomainError extends Error {
   public readonly isOperational: boolean;
+
+  constructor(message: string) {
+    super(message);
+    this.name = this.constructor.name;
+    this.isOperational = true;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class AppError extends DomainError {
+  public readonly statusCode: number;
 
   constructor(message: string, statusCode: number) {
     super(message);
     this.statusCode = statusCode;
-    this.isOperational = true;
-    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 

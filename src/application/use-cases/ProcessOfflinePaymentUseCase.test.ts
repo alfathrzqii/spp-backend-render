@@ -4,7 +4,7 @@ import { mockDeep } from 'vitest-mock-extended';
 import type { IInvoiceRepository } from '../../domain/repositories/IInvoiceRepository.js';
 import type { IStudentRepository } from '../../domain/repositories/IStudentRepository.js';
 import type { ISppTariffRepository } from '../../domain/repositories/ISppTariffRepository.js';
-import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from '@prisma/client';
+import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from '../../domain/enums/index.js';
 import { Student } from '../../domain/entities/Student.js';
 
 describe('ProcessOfflinePaymentUseCase', () => {

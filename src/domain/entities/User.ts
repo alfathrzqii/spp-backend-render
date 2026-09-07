@@ -1,4 +1,4 @@
-import type { Role } from "@prisma/client";
+import type { Role } from "../enums/Role.js";
 
 export class User {
   constructor(
