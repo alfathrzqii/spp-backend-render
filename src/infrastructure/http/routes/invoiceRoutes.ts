@@ -90,6 +90,13 @@ router.post(
   invoiceController.simulatePakasirPayment.bind(invoiceController)
 );
 
+router.post(
+  "/pakasir/sync",
+  authMiddleware,
+  roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN", "PARENT"]),
+  invoiceController.syncPakasirTransactions.bind(invoiceController)
+);
+
 router.put(
   "/:id/status",
   authMiddleware,
