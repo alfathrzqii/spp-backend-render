@@ -1267,47 +1267,6 @@ export class InvoiceController {
     }
   }
 
-  async payOnlineSimulated(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.payOnlineSimulated(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
-
-  async createPakasirTransaction(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.createPakasirTransaction(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
-
-  async checkPakasirStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.checkPakasirStatus(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
-
-  async handlePakasirWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.handlePakasirWebhook(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
-
-  async syncPakasirTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.syncPakasirTransactions(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
-
-  async simulatePakasirPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
-    if (this.pakasirController) {
-      return this.pakasirController.simulatePakasirPayment(req, res, next);
-    }
-    res.status(500).json({ success: false, message: "PakasirController tidak terpasang" });
-  }
 
 
   async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -1315,125 +1274,24 @@ export class InvoiceController {
       const { id } = req.params as { id: string };
       const { status, paymentMethod } = req.body;
 
-      if (this.updateInvoiceStatusUseCase) {
-        let method: any = "CASH";
-        if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
-          method = "TRANSFER";
-        }
-        const updatedInvoice = await this.updateInvoiceStatusUseCase.execute({
-          invoiceId: parseInt(id),
-          status,
-          paymentMethod: method,
-          recordedById: req.user?.id,
-        });
-        res.status(200).json({
-          success: true,
-          message: "Status tagihan berhasil diperbarui",
-          data: updatedInvoice,
-        });
-        return;
+      if (!this.updateInvoiceStatusUseCase) {
+        throw new Error("UpdateInvoiceStatusUseCase tidak tersedia");
       }
 
-      if (!status || !["PAID", "PENDING"].includes(status)) {
-        res.status(400).json({ success: false, message: "Status tidak valid. Gunakan PAID atau PENDING." });
-        return;
-      }
-
-      const invoice = await prisma.invoice.findUnique({
-        where: { id: parseInt(id) },
-        include: { student: true },
-      });
-
-      if (!invoice) {
-        res.status(404).json({ success: false, message: "Tagihan tidak ditemukan" });
-        return;
-      }
-
-      let chosenMethod: "CASH" | "TRANSFER" = "CASH";
+      let method: any = "CASH";
       if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
-        chosenMethod = "TRANSFER";
+        method = "TRANSFER";
       }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const updatedInvoice = await tx.invoice.update({
-          where: { id: invoice.id },
-          data: { status: status as any },
-        });
-
-        if (status === "PAID") {
-          const existingTx = await tx.transaction.findFirst({
-            where: { invoiceId: invoice.id, type: "INCOME" as any },
-          });
-
-          if (!existingTx) {
-            let categoryName = "SPP";
-            if (invoice.invoiceType === "UANG_PENGEMBANGAN") categoryName = "Uang Pengembangan";
-            else if (invoice.invoiceType === "DAFTAR_ULANG") categoryName = "Daftar Ulang";
-            else if (invoice.invoiceType === "UANG_PERALATAN") categoryName = "Uang Peralatan";
-            else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
-            else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
-            else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
-
-            let category = await tx.category.findFirst({
-              where: {
-                name: { equals: categoryName, mode: "insensitive" },
-                type: "INCOME",
-              },
-            });
-            if (!category) {
-              category = await tx.category.create({
-                data: {
-                  name: categoryName,
-                  type: "INCOME",
-                  schoolUnitId: null,
-                },
-              });
-            }
-
-            let txAmount = invoice.amount;
-            if (!txAmount || txAmount <= 0) {
-              const tariff = await tx.sppTariff.findFirst({
-                where: {
-                  schoolUnitId: invoice.student.schoolUnitId,
-                  enrollmentYear: invoice.student.enrollmentYear,
-                },
-              });
-              if (tariff) {
-                const disc = invoice.student.discountAmount || 0;
-                txAmount = Math.max(0, tariff.amount - disc);
-                await tx.invoice.update({
-                  where: { id: invoice.id },
-                  data: { amount: txAmount, baseAmount: tariff.amount, discountApplied: disc },
-                });
-              }
-            }
-
-            await tx.transaction.create({
-              data: {
-                type: "INCOME" as any,
-                categoryId: category.id,
-                paymentMethod: chosenMethod as any,
-                amount: txAmount,
-                description: `Pembaruan status lunas manual (${chosenMethod === "TRANSFER" ? "Transfer Bank" : "Tunai"}) oleh Admin SPP bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
-                schoolUnitId: invoice.student.schoolUnitId,
-                recordedById: req.user?.id || null,
-                invoiceId: invoice.id,
-              },
-            });
-          }
-        } else {
-          await tx.transaction.deleteMany({
-            where: { invoiceId: invoice.id },
-          });
-        }
-
-        return updatedInvoice;
+      const updatedInvoice = await this.updateInvoiceStatusUseCase.execute({
+        invoiceId: parseInt(id),
+        status,
+        paymentMethod: method,
+        recordedById: req.user?.id,
       });
-
       res.status(200).json({
         success: true,
         message: "Status tagihan berhasil diperbarui",
-        data: result,
+        data: updatedInvoice,
       });
     } catch (error: any) {
       next(error);
@@ -1444,34 +1302,11 @@ export class InvoiceController {
     try {
       const { id } = req.params as { id: string };
 
-      if (this.deleteInvoiceUseCase) {
-        await this.deleteInvoiceUseCase.execute(parseInt(id));
-        res.status(200).json({
-          success: true,
-          message: "Tagihan dan seluruh riwayat pembayarannya berhasil dihapus",
-        });
-        return;
+      if (!this.deleteInvoiceUseCase) {
+        throw new Error("DeleteInvoiceUseCase tidak tersedia");
       }
 
-      const invoice = await prisma.invoice.findUnique({
-        where: { id: parseInt(id) },
-      });
-
-      if (!invoice) {
-        res.status(404).json({ success: false, message: "Tagihan tidak ditemukan" });
-        return;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.transaction.deleteMany({
-          where: { invoiceId: invoice.id },
-        });
-
-        await tx.invoice.delete({
-          where: { id: invoice.id },
-        });
-      });
-
+      await this.deleteInvoiceUseCase.execute(parseInt(id));
       res.status(200).json({
         success: true,
         message: "Tagihan dan seluruh riwayat pembayarannya berhasil dihapus",
@@ -1485,106 +1320,33 @@ export class InvoiceController {
     try {
       const { schoolUnitId, className, status, month, year, search, invoiceType, page = "1", limit = "50" } = req.query;
 
-      if (this.getAllInvoicesUseCase) {
-        let parsedSchoolUnitId: number | undefined;
-        if (req.user?.role === "UNIT_ADMIN") {
-          parsedSchoolUnitId = req.user.schoolUnitId ?? undefined;
-        } else if (schoolUnitId) {
-          parsedSchoolUnitId = parseInt(schoolUnitId as string);
-        }
-
-        const result = await this.getAllInvoicesUseCase.execute({
-          schoolUnitId: parsedSchoolUnitId,
-          className: className as string | undefined,
-          status: status as any,
-          month: month ? parseInt(month as string) : undefined,
-          year: year ? parseInt(year as string) : undefined,
-          search: search as string | undefined,
-          invoiceType: invoiceType as any,
-          page: parseInt(page as string),
-          limit: parseInt(limit as string),
-        });
-
-        res.status(200).json({
-          success: true,
-          data: result.invoices,
-          pagination: result.pagination,
-        });
-        return;
+      if (!this.getAllInvoicesUseCase) {
+        throw new Error("GetAllInvoicesUseCase tidak tersedia");
       }
 
-      const filter: any = {};
-
-      // Role authorization
+      let parsedSchoolUnitId: number | undefined;
       if (req.user?.role === "UNIT_ADMIN") {
-        filter.student = { schoolUnitId: req.user.schoolUnitId };
+        parsedSchoolUnitId = req.user.schoolUnitId ?? undefined;
       } else if (schoolUnitId) {
-        filter.student = { schoolUnitId: parseInt(schoolUnitId as string) };
+        parsedSchoolUnitId = parseInt(schoolUnitId as string);
       }
 
-      if (className) {
-        if (!filter.student) filter.student = {};
-        filter.student.className = className as string;
-      }
-
-      if (search) {
-        if (!filter.student) filter.student = {};
-        filter.student.OR = [
-          { name: { contains: search as string, mode: "insensitive" } },
-          { studentNumber: { contains: search as string } }
-        ];
-      }
-
-      if (invoiceType) {
-        filter.invoiceType = invoiceType as any;
-      }
-
-      if (status) {
-        filter.status = status as any;
-      }
-
-      if (month) {
-        filter.month = parseInt(month as string);
-      }
-
-      if (year) {
-        filter.year = parseInt(year as string);
-      }
-
-      const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
-      const take = parseInt(limit as string);
-
-      const [invoices, total] = await Promise.all([
-        prisma.invoice.findMany({
-          where: filter,
-          include: {
-            student: {
-              include: {
-                parent: true
-              }
-            },
-            transactions: true
-          },
-          orderBy: [
-            { year: "desc" },
-            { month: "desc" },
-            { id: "desc" }
-          ],
-          skip,
-          take
-        }),
-        prisma.invoice.count({ where: filter })
-      ]);
+      const result = await this.getAllInvoicesUseCase.execute({
+        schoolUnitId: parsedSchoolUnitId,
+        className: className as string | undefined,
+        status: status as any,
+        month: month ? parseInt(month as string) : undefined,
+        year: year ? parseInt(year as string) : undefined,
+        search: search as string | undefined,
+        invoiceType: invoiceType as any,
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+      });
 
       res.status(200).json({
         success: true,
-        data: invoices,
-        pagination: {
-          total,
-          page: parseInt(page as string),
-          limit: take,
-          totalPages: Math.ceil(total / take)
-        }
+        data: result.invoices,
+        pagination: result.pagination,
       });
     } catch (error: any) {
       next(error);
