@@ -3,12 +3,12 @@ import { LoginUseCase } from './LoginUseCase.js';
 import { User } from '../../domain/entities/User.js';
 import { mockDeep } from 'vitest-mock-extended';
 import type { IUserRepository } from '../../domain/repositories/IUserRepository.js';
-import type { PasswordHasher } from '../../infrastructure/services/PasswordHasher.js';
+import type { IPasswordHasher } from '../ports/IPasswordHasher.js';
 
 describe('LoginUseCase', () => {
   let loginUseCase: LoginUseCase;
   const mockUserRepository = mockDeep<IUserRepository>();
-  const mockPasswordHasher = mockDeep<PasswordHasher>();
+  const mockPasswordHasher = mockDeep<IPasswordHasher>();
 
   beforeEach(() => {
     loginUseCase = new LoginUseCase(mockUserRepository, mockPasswordHasher);

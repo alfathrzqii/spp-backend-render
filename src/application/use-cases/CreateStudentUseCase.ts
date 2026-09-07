@@ -1,7 +1,7 @@
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
-import type { PasswordHasher } from "../../infrastructure/services/PasswordHasher.js";
+import type { IPasswordHasher } from "../ports/IPasswordHasher.js";
 import type { Student } from "../../domain/entities/Student.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
 
@@ -27,7 +27,7 @@ export class CreateStudentUseCase {
     private studentRepository: IStudentRepository,
     private userRepository: IUserRepository,
     private sppTariffRepository: ISppTariffRepository,
-    private passwordHasher: PasswordHasher
+    private passwordHasher: IPasswordHasher
   ) {}
 
   async execute(data: CreateStudentRequest): Promise<Student> {

@@ -1,12 +1,12 @@
 import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
 import type { User } from "../../domain/entities/User.js";
-import type { PasswordHasher } from "../../infrastructure/services/PasswordHasher.js";
+import type { IPasswordHasher } from "../ports/IPasswordHasher.js";
 import { UnauthorizedError } from "../../domain/errors/AppError.js";
 
 export class LoginUseCase {
   constructor(
     private userRepository: IUserRepository,
-    private passwordHasher: PasswordHasher
+    private passwordHasher: IPasswordHasher
   ) {}
 
   async execute(identifier: string, password: string): Promise<User> {

@@ -4,7 +4,7 @@ import { mockDeep } from 'vitest-mock-extended';
 import type { IStudentRepository } from '../../domain/repositories/IStudentRepository.js';
 import type { IUserRepository } from '../../domain/repositories/IUserRepository.js';
 import type { ISppTariffRepository } from '../../domain/repositories/ISppTariffRepository.js';
-import type { PasswordHasher } from '../../infrastructure/services/PasswordHasher.js';
+import type { IPasswordHasher } from '../ports/IPasswordHasher.js';
 import { Student } from '../../domain/entities/Student.js';
 import { User } from '../../domain/entities/User.js';
 
@@ -13,7 +13,7 @@ describe('CreateStudentUseCase', () => {
   const mockStudentRepository = mockDeep<IStudentRepository>();
   const mockUserRepository = mockDeep<IUserRepository>();
   const mockSppTariffRepository = mockDeep<ISppTariffRepository>();
-  const mockPasswordHasher = mockDeep<PasswordHasher>();
+  const mockPasswordHasher = mockDeep<IPasswordHasher>();
 
   beforeEach(() => {
     createStudentUseCase = new CreateStudentUseCase(
