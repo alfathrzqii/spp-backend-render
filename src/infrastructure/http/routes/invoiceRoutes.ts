@@ -14,6 +14,9 @@ import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/Pro
 import { GetAllInvoicesUseCase } from "../../../application/use-cases/GetAllInvoicesUseCase.js";
 import { UpdateInvoiceStatusUseCase } from "../../../application/use-cases/UpdateInvoiceStatusUseCase.js";
 import { DeleteInvoiceUseCase } from "../../../application/use-cases/DeleteInvoiceUseCase.js";
+import { GetUnpaidInvoicesUseCase } from "../../../application/use-cases/GetUnpaidInvoicesUseCase.js";
+import { GetClassRecapUseCase } from "../../../application/use-cases/GetClassRecapUseCase.js";
+import { GetStudentInvoicesUseCase } from "../../../application/use-cases/GetStudentInvoicesUseCase.js";
 import { CreatePakasirTransactionUseCase } from "../../../application/use-cases/CreatePakasirTransactionUseCase.js";
 import { CheckPakasirStatusUseCase } from "../../../application/use-cases/CheckPakasirStatusUseCase.js";
 import { HandlePakasirWebhookUseCase } from "../../../application/use-cases/HandlePakasirWebhookUseCase.js";
@@ -46,6 +49,9 @@ const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
 const getAllInvoicesUseCase = new GetAllInvoicesUseCase(invoiceRepo);
 const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, sppTariffRepo);
 const deleteInvoiceUseCase = new DeleteInvoiceUseCase(invoiceRepo);
+const getUnpaidInvoicesUseCase = new GetUnpaidInvoicesUseCase();
+const getClassRecapUseCase = new GetClassRecapUseCase();
+const getStudentInvoicesUseCase = new GetStudentInvoicesUseCase(invoiceRepo);
 
 // Pakasir & Online Payment Use Cases
 const createPakasirTransactionUseCase = new CreatePakasirTransactionUseCase(
@@ -100,8 +106,9 @@ const invoiceController = new InvoiceController(
   getAllInvoicesUseCase,
   updateInvoiceStatusUseCase,
   deleteInvoiceUseCase,
-  pakasirController,
-  invoiceRepo
+  getUnpaidInvoicesUseCase,
+  getClassRecapUseCase,
+  getStudentInvoicesUseCase
 );
 
 // Routes
