@@ -21,3 +21,6 @@ coverage/
 .vscode/
 *.suo
 *.swp
+
+# Local development
+temp/
