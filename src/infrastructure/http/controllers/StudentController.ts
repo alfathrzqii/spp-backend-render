@@ -4,6 +4,7 @@ import type { CreateStudentUseCase } from "../../../application/use-cases/Create
 import type { GetStudentsUseCase } from "../../../application/use-cases/GetStudentsUseCase.js";
 import type { UpdateStudentUseCase } from "../../../application/use-cases/UpdateStudentUseCase.js";
 import type { DeleteStudentUseCase } from "../../../application/use-cases/DeleteStudentUseCase.js";
+import type { ImportStudentsUseCase } from "../../../application/use-cases/ImportStudentsUseCase.js";
 import { logActivity } from "../../utils/activityLogger.js";
 
 export class StudentController {
@@ -11,7 +12,8 @@ export class StudentController {
     private createStudentUseCase: CreateStudentUseCase,
     private getStudentsUseCase: GetStudentsUseCase,
     private updateStudentUseCase: UpdateStudentUseCase,
-    private deleteStudentUseCase: DeleteStudentUseCase
+    private deleteStudentUseCase: DeleteStudentUseCase,
+    private importStudentsUseCase?: ImportStudentsUseCase
   ) {}
 
   async create(req: Request, res: Response, next: NextFunction) {
@@ -208,6 +210,38 @@ export class StudentController {
         message: "Data siswa berhasil dihapus",
       });
     } catch (error: any) {
+      next(error);
+    }
+  }
+
+  async import(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = req.user as any;
+      const { rows } = req.body;
+
+      if (!rows || !Array.isArray(rows)) {
+        res.status(400).json({
+          success: false,
+          message: "Format data tidak valid. Wajib menyertakan array data siswa.",
+        });
+        return;
+      }
+
+      if (!this.importStudentsUseCase) {
+        throw new Error("ImportStudentsUseCase belum terdaftar");
+      }
+
+      const result = await this.importStudentsUseCase.execute(rows, {
+        role: user.role,
+        schoolUnitId: user.schoolUnitId ?? null,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Import selesai. Sukses: ${result.successCount}, Gagal: ${result.failedCount}`,
+        data: result,
+      });
+    } catch (error) {
       next(error);
     }
   }

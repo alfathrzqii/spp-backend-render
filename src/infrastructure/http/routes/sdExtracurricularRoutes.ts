@@ -8,7 +8,7 @@ import { CreateSdExtracurricularUseCase } from "../../../application/use-cases/C
 import { GetSdExtracurricularsUseCase } from "../../../application/use-cases/GetSdExtracurricularsUseCase.js";
 import { UpdateSdExtracurricularUseCase } from "../../../application/use-cases/UpdateSdExtracurricularUseCase.js";
 import { DeleteSdExtracurricularUseCase } from "../../../application/use-cases/DeleteSdExtracurricularUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 
 const router = Router();
 

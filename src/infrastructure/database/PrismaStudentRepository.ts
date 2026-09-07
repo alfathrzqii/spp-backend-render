@@ -177,6 +177,15 @@ export class PrismaStudentRepository implements IStudentRepository {
     return this.mapToDomain(student);
   }
 
+  async findByParentId(parentId: number): Promise<any[]> {
+    return await this.prisma.student.findMany({
+      where: { parentId },
+      include: {
+        schoolUnit: { select: { name: true } },
+      },
+    });
+  }
+
   async update(
     id: number,
     data: {

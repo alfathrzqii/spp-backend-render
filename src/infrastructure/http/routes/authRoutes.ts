@@ -6,7 +6,7 @@ import { PasswordHasher } from "../../services/PasswordHasher.js";
 import { TokenService } from "../../services/TokenService.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import { loginSchema } from "../schemas/authSchema.js";
 
 const authRoutes = Router();

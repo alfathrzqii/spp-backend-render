@@ -7,7 +7,7 @@ import { DeleteCategoryUseCase } from "../../../application/use-cases/DeleteCate
 import { PrismaCategoryRepository } from "../../database/PrismaCategoryRepository.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import { categorySchema } from "../schemas/categorySchema.js";
 
 const router = Router();
