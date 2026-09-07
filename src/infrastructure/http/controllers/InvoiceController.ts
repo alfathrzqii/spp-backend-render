@@ -15,7 +15,7 @@ export class InvoiceController {
   async payOffline(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const user = req.user!;
-      const { studentNumber, month, year, invoiceType, paymentAmount } = req.body;
+      const { studentNumber, month, year, invoiceType, paymentAmount, paymentMethod } = req.body;
 
       const student = await this.studentRepository.findByStudentNumber(studentNumber);
       if (!student) {
@@ -43,6 +43,11 @@ export class InvoiceController {
         return;
       }
 
+      let method: "CASH" | "TRANSFER" = "CASH";
+      if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
+        method = "TRANSFER";
+      }
+
       const result = await this.processOfflinePaymentUseCase.execute({
         studentId: student.id,
         month: Number(month),
@@ -50,11 +55,14 @@ export class InvoiceController {
         recordedById: user.id,
         invoiceType: invoiceType as any,
         paymentAmount: paymentAmount !== undefined ? Number(paymentAmount) : undefined,
+        paymentMethod: method as any,
       });
 
       res.status(200).json({
         success: true,
-        message: "Pembayaran tunai SPP offline berhasil diproses",
+        message: method === "TRANSFER"
+          ? "Pembayaran SPP via transfer bank manual berhasil diproses"
+          : "Pembayaran tunai SPP offline berhasil diproses",
         data: result,
       });
     } catch (error: any) {
@@ -509,6 +517,50 @@ export class InvoiceController {
         return;
       }
 
+      // Auto-reconcile any pending Pakasir invoices for this student
+      try {
+        const pendingPakasir = await prisma.invoice.findMany({
+          where: {
+            studentId: student.id,
+            status: "PENDING" as any,
+            midtransOrderId: {
+              not: null,
+              startsWith: "BATCH-",
+            },
+          },
+          include: {
+            student: { select: { name: true, schoolUnitId: true } },
+          },
+        });
+
+        if (pendingPakasir.length > 0) {
+          const projectSlug = process.env.PAKASIR_PROJECT_SLUG || "depodomain";
+          const apiKey = process.env.PAKASIR_API_KEY || "xxx123";
+
+          const studentBatchMap = new Map<string, typeof pendingPakasir>();
+          for (const inv of pendingPakasir) {
+            const rawId = inv.midtransOrderId || "";
+            const baseId = rawId.replace(/-\d+$/, "");
+            if (!studentBatchMap.has(baseId)) studentBatchMap.set(baseId, []);
+            studentBatchMap.get(baseId)!.push(inv);
+          }
+
+          for (const [baseOrderId, invs] of studentBatchMap.entries()) {
+            const totalAmount = invs.reduce((sum, inv) => sum + inv.amount, 0);
+            const detailUrl = `https://app.pakasir.com/api/transactiondetail?project=${projectSlug}&amount=${totalAmount}&order_id=${baseOrderId}&api_key=${apiKey}`;
+            const checkResp = await fetch(detailUrl, { signal: AbortSignal.timeout(3000) });
+            if (checkResp.ok) {
+              const checkData = (await checkResp.json()) as any;
+              if (checkData?.transaction?.status === "completed") {
+                await this.processPaidInvoicesForPakasir(invs, "Auto-Sync");
+              }
+            }
+          }
+        }
+      } catch (autoSyncErr) {
+        logger.warn(`Auto-sync Pakasir for student ${studentNumber} skipped: ${autoSyncErr instanceof Error ? autoSyncErr.message : String(autoSyncErr)}`);
+      }
+
       // === LOGIKA PPDB (SISWA BARU / DAFTAR ULANG) ===
       if (student.className.toUpperCase() === "PPDB") {
         const dbInvoices = await prisma.invoice.findMany({
@@ -682,7 +734,7 @@ export class InvoiceController {
           (inv) => inv.month === month && inv.invoiceType === ("SPP" as any)
         );
         if (existing) {
-          if (existing.status === "PENDING") {
+          if (existing.status === "PENDING" || !existing.amount || existing.amount <= 0) {
             existing.baseAmount = baseAmount;
             existing.discountApplied = discountApplied;
             existing.amount = netAmount;
@@ -1583,6 +1635,69 @@ export class InvoiceController {
     }
   }
 
+  private async processPaidInvoicesForPakasir(invoices: any[], source: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      for (const invoice of invoices) {
+        if ((invoice.status as any) === "PAID") continue;
+
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: "PAID" as any,
+          },
+        });
+
+        const existingTx = await tx.transaction.findFirst({
+          where: { invoiceId: invoice.id, type: "INCOME" as any },
+        });
+
+        if (!existingTx) {
+          let categoryName = "SPP";
+          if (invoice.invoiceType === "UANG_PENGEMBANGAN") categoryName = "Uang Pengembangan";
+          else if (invoice.invoiceType === "DAFTAR_ULANG") categoryName = "Daftar Ulang";
+          else if (invoice.invoiceType === "UANG_PERALATAN") categoryName = "Uang Peralatan";
+          else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
+          else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
+          else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
+          else if (invoice.invoiceType === "KEGIATAN") categoryName = "Uang Kegiatan";
+          else if (invoice.invoiceType === "LAINNYA") categoryName = "Lain-lain";
+
+          let category = await tx.category.findFirst({
+            where: {
+              name: { equals: categoryName, mode: "insensitive" },
+              type: "INCOME",
+            },
+          });
+          if (!category) {
+            category = await tx.category.create({
+              data: {
+                name: categoryName,
+                type: "INCOME",
+                schoolUnitId: null,
+              },
+            });
+          }
+
+          const studentName = invoice.student?.name || "Siswa";
+          const schoolUnitId = invoice.student?.schoolUnitId || null;
+
+          await tx.transaction.create({
+            data: {
+              type: "INCOME" as any,
+              categoryId: category.id,
+              paymentMethod: "MIDTRANS" as any,
+              amount: invoice.amount,
+              description: `Pembayaran ${categoryName} online (Pakasir ${source}) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${studentName}`,
+              schoolUnitId,
+              recordedById: null,
+              invoiceId: invoice.id,
+            },
+          });
+        }
+      }
+    });
+  }
+
   async checkPakasirStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { order_id, amount } = req.query;
@@ -1592,7 +1707,7 @@ export class InvoiceController {
         return;
       }
 
-      const invoices = await prisma.invoice.findMany({
+      let invoices = await prisma.invoice.findMany({
         where: {
           midtransOrderId: {
             startsWith: order_id as string,
@@ -1604,6 +1719,32 @@ export class InvoiceController {
           },
         },
       });
+
+      if (invoices.length === 0) {
+        // Fallback: check if order_id is in format BATCH-{studentNumber}-{timestamp}
+        const match = String(order_id).match(/^BATCH-([^-]+)-(\d+)/);
+        if (match && match[1]) {
+          const studentNumber = match[1];
+          const student = await prisma.student.findFirst({
+            where: { studentNumber },
+            select: { id: true, name: true, schoolUnitId: true },
+          });
+          if (student) {
+            const pendingInvoices = await prisma.invoice.findMany({
+              where: {
+                studentId: student.id,
+                status: "PENDING" as any,
+              },
+              include: {
+                student: { select: { name: true, schoolUnitId: true } },
+              },
+            });
+            if (pendingInvoices.length > 0) {
+              invoices = pendingInvoices;
+            }
+          }
+        }
+      }
 
       if (invoices.length === 0) {
         logger.warn(`checkPakasirStatus - Tagihan tidak ditemukan untuk order_id: ${order_id}`);
@@ -1646,63 +1787,7 @@ export class InvoiceController {
 
       if (transactionStatus === "completed") {
         logger.info(`checkPakasirStatus - Transaksi ${order_id} terverifikasi selesai di Pakasir, memproses pembaruan DB...`);
-        await prisma.$transaction(async (tx) => {
-          for (const invoice of invoices) {
-            if ((invoice.status as any) === "PAID") continue;
-
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: {
-                status: "PAID" as any,
-              },
-            });
-
-            const existingTx = await tx.transaction.findFirst({
-              where: { invoiceId: invoice.id, type: "INCOME" as any },
-            });
-
-            if (!existingTx) {
-              let categoryName = "SPP";
-              if (invoice.invoiceType === "UANG_PENGEMBANGAN") categoryName = "Uang Pengembangan";
-              else if (invoice.invoiceType === "DAFTAR_ULANG") categoryName = "Daftar Ulang";
-              else if (invoice.invoiceType === "UANG_PERALATAN") categoryName = "Uang Peralatan";
-              else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
-              else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
-              else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
-              else if (invoice.invoiceType === "KEGIATAN") categoryName = "Uang Kegiatan";
-              else if (invoice.invoiceType === "LAINNYA") categoryName = "Lain-lain";
-
-              let category = await tx.category.findFirst({
-                where: {
-                  name: { equals: categoryName, mode: "insensitive" },
-                  type: "INCOME",
-                },
-              });
-              if (!category) {
-                category = await tx.category.create({
-                  data: {
-                    name: categoryName,
-                    type: "INCOME",
-                    schoolUnitId: null,
-                  },
-                });
-              }
-
-              await tx.transaction.create({
-                data: {
-                  type: "INCOME" as any,
-                  categoryId: category.id,
-                  paymentMethod: "MIDTRANS" as any,
-                  amount: invoice.amount,
-                  description: `Pembayaran ${categoryName} online (Pakasir) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
-                  schoolUnitId: invoice.student.schoolUnitId,
-                  recordedById: null,
-                  invoiceId: invoice.id,
-                },
-              });
-            }
-          }
-        });
+        await this.processPaidInvoicesForPakasir(invoices, "Polling");
 
         res.status(200).json({
           success: true,
@@ -1740,7 +1825,7 @@ export class InvoiceController {
         return;
       }
 
-      const invoices = await prisma.invoice.findMany({
+      let invoices = await prisma.invoice.findMany({
         where: {
           midtransOrderId: {
             startsWith: order_id,
@@ -1748,6 +1833,34 @@ export class InvoiceController {
         },
         include: { student: true },
       });
+
+      if (invoices.length === 0) {
+        // Fallback: Check if order_id is in format BATCH-{studentNumber}-{timestamp}
+        const match = String(order_id).match(/^BATCH-([^-]+)-(\d+)/);
+        if (match && match[1]) {
+          const studentNumber = match[1];
+          const student = await prisma.student.findFirst({
+            where: { studentNumber },
+          });
+          if (student) {
+            const pendingInvoices = await prisma.invoice.findMany({
+              where: {
+                studentId: student.id,
+                status: "PENDING" as any,
+              },
+              include: { student: true },
+            });
+            if (pendingInvoices.length > 0) {
+              const pendingSum = pendingInvoices.reduce((acc, inv) => acc + inv.amount, 0);
+              if (Number(amount) === pendingSum || pendingInvoices.some(inv => inv.amount === Number(amount))) {
+                invoices = Number(amount) === pendingSum ? pendingInvoices : pendingInvoices.filter(inv => inv.amount === Number(amount));
+              } else {
+                invoices = pendingInvoices;
+              }
+            }
+          }
+        }
+      }
 
       if (invoices.length === 0) {
         logger.warn(`Webhook Pakasir - Tagihan tidak ditemukan untuk order_id: ${order_id}`);
@@ -1763,18 +1876,232 @@ export class InvoiceController {
       }
 
       logger.info(`Webhook Pakasir - Mulai memproses pembaruan status lunas untuk order_id: ${order_id}`);
+      await this.processPaidInvoicesForPakasir(invoices, "Webhook");
 
-      await prisma.$transaction(async (tx) => {
-        for (const invoice of invoices) {
-          if ((invoice.status as any) === "PAID") continue;
+      logger.info(`Webhook Pakasir - Berhasil memproses pembayaran untuk order_id: ${order_id}`);
+      res.status(200).json({ success: true, message: "Webhook berhasil diproses" });
+    } catch (error: any) {
+      logger.error(`Webhook Pakasir gagal untuk order_id: ${req.body?.order_id || "unknown"} - Error: ${error.message}`);
+      next(error);
+    }
+  }
 
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              status: "PAID" as any,
-            },
+  async syncPakasirTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = req.user;
+      const { studentNumber } = req.body || req.query;
+
+      const where: any = {
+        status: "PENDING" as any,
+        midtransOrderId: {
+          not: null,
+          startsWith: "BATCH-",
+        },
+      };
+
+      if (studentNumber) {
+        where.student = { studentNumber: String(studentNumber) };
+      } else if (user && (user.role as any) === "UNIT_ADMIN") {
+        where.student = { schoolUnitId: user.schoolUnitId };
+      }
+
+      const pendingInvoices = await prisma.invoice.findMany({
+        where,
+        include: {
+          student: {
+            select: { id: true, name: true, studentNumber: true, schoolUnitId: true },
+          },
+        },
+      });
+
+      if (pendingInvoices.length === 0) {
+        res.status(200).json({
+          success: true,
+          message: "Tidak ada tagihan tertunda (pending) yang perlu disinkronkan",
+          data: { checkedBatches: 0, syncedCount: 0 },
+        });
+        return;
+      }
+
+      const projectSlug = process.env.PAKASIR_PROJECT_SLUG || "depodomain";
+      const apiKey = process.env.PAKASIR_API_KEY || "xxx123";
+
+      // Group pending invoices by base orderId
+      const batchMap = new Map<string, typeof pendingInvoices>();
+      for (const inv of pendingInvoices) {
+        const rawId = inv.midtransOrderId || "";
+        const baseId = rawId.replace(/-\d+$/, "");
+        if (!batchMap.has(baseId)) {
+          batchMap.set(baseId, []);
+        }
+        batchMap.get(baseId)!.push(inv);
+      }
+
+      let syncedCount = 0;
+      const checkedBatches = Array.from(batchMap.keys());
+
+      for (const [baseOrderId, invs] of batchMap.entries()) {
+        const totalAmount = invs.reduce((sum, inv) => sum + inv.amount, 0);
+        const detailUrl = `https://app.pakasir.com/api/transactiondetail?project=${projectSlug}&amount=${totalAmount}&order_id=${baseOrderId}&api_key=${apiKey}`;
+
+        try {
+          const response = await fetch(detailUrl);
+          if (response.ok) {
+            const data = (await response.json()) as any;
+            if (data?.transaction?.status === "completed") {
+              await this.processPaidInvoicesForPakasir(invs, "Manual-Sync");
+              syncedCount += invs.length;
+              logger.info(`syncPakasirTransactions: Berhasil menyinkronkan ${invs.length} invoice untuk order ${baseOrderId}`);
+            }
+          }
+        } catch (fetchErr) {
+          logger.warn(`syncPakasirTransactions: Gagal memeriksa order ${baseOrderId} ke Pakasir: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: syncedCount > 0
+          ? `Sinkronisasi berhasil: ${syncedCount} tagihan diperbarui menjadi Lunas`
+          : "Sinkronisasi selesai: Tidak ada transaksi baru yang lunas di Pakasir",
+        data: {
+          checkedBatches: checkedBatches.length,
+          syncedCount,
+        },
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  async simulatePakasirPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { orderId, order_id, amount } = req.body;
+      const targetOrderId = orderId || order_id;
+
+      if (!targetOrderId) {
+        res.status(400).json({ success: false, message: "orderId wajib diisi" });
+        return;
+      }
+
+      let invoices = await prisma.invoice.findMany({
+        where: {
+          midtransOrderId: {
+            startsWith: String(targetOrderId),
+          },
+        },
+        include: {
+          student: {
+            select: { name: true, schoolUnitId: true },
+          },
+        },
+      });
+
+      if (invoices.length === 0) {
+        // Fallback: check if order_id is in format BATCH-{studentNumber}-{timestamp}
+        const match = String(targetOrderId).match(/^BATCH-([^-]+)-(\d+)/);
+        if (match && match[1]) {
+          const studentNumber = match[1];
+          const student = await prisma.student.findFirst({
+            where: { studentNumber },
+            select: { id: true, name: true, schoolUnitId: true },
           });
+          if (student) {
+            const pendingInvoices = await prisma.invoice.findMany({
+              where: {
+                studentId: student.id,
+                status: "PENDING" as any,
+              },
+              include: {
+                student: { select: { name: true, schoolUnitId: true } },
+              },
+            });
+            if (pendingInvoices.length > 0) {
+              invoices = pendingInvoices;
+            }
+          }
+        }
+      }
 
+      if (invoices.length === 0) {
+        res.status(404).json({ success: false, message: "Tagihan tidak ditemukan untuk Order ID ini" });
+        return;
+      }
+
+      const projectSlug = process.env.PAKASIR_PROJECT_SLUG || "depodomain";
+      const apiKey = process.env.PAKASIR_API_KEY || "xxx123";
+      const totalAmount = amount
+        ? Number(amount)
+        : invoices.reduce((sum, inv) => sum + inv.amount, 0);
+
+      // Best-effort call ke API simulasi Pakasir eksternal
+      try {
+        await fetch("https://app.pakasir.com/api/paymentsimulation", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            project: projectSlug,
+            order_id: String(targetOrderId),
+            amount: totalAmount,
+            api_key: apiKey,
+          }),
+        });
+      } catch (err) {
+        logger.warn(`Simulasi Pakasir eksternal dilewati: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      // Selalu perbarui status invoice dan catat transaksi kasir secara lokal
+      await this.processPaidInvoicesForPakasir(invoices, "Simulasi");
+
+      logger.info(`Simulasi pembayaran Pakasir berhasil untuk order: ${targetOrderId} (${invoices.length} tagihan)`);
+
+      res.status(200).json({
+        success: true,
+        message: "Simulasi pembayaran QRIS/VA Pakasir berhasil! Status tagihan kini lunas.",
+        data: {
+          orderId: targetOrderId,
+          paidCount: invoices.length,
+        },
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params as { id: string };
+      const { status, paymentMethod } = req.body;
+
+      if (!status || !["PAID", "PENDING"].includes(status)) {
+        res.status(400).json({ success: false, message: "Status tidak valid. Gunakan PAID atau PENDING." });
+        return;
+      }
+
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: parseInt(id) },
+        include: { student: true },
+      });
+
+      if (!invoice) {
+        res.status(404).json({ success: false, message: "Tagihan tidak ditemukan" });
+        return;
+      }
+
+      let chosenMethod: "CASH" | "TRANSFER" = "CASH";
+      if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
+        chosenMethod = "TRANSFER";
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedInvoice = await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { status: status as any },
+        });
+
+        if (status === "PAID") {
           const existingTx = await tx.transaction.findFirst({
             where: { invoiceId: invoice.id, type: "INCOME" as any },
           });
@@ -1787,8 +2114,6 @@ export class InvoiceController {
             else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
             else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
             else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
-            else if (invoice.invoiceType === "KEGIATAN") categoryName = "Uang Kegiatan";
-            else if (invoice.invoiceType === "LAINNYA") categoryName = "Lain-lain";
 
             let category = await tx.category.findFirst({
               where: {
@@ -1806,198 +2131,31 @@ export class InvoiceController {
               });
             }
 
-            await tx.transaction.create({
-              data: {
-                type: "INCOME" as any,
-                categoryId: category.id,
-                paymentMethod: "MIDTRANS" as any,
-                amount: invoice.amount,
-                description: `Pembayaran ${categoryName} online (Pakasir Webhook) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
-                schoolUnitId: invoice.student.schoolUnitId,
-                recordedById: null,
-                invoiceId: invoice.id,
-              },
-            });
-          }
-        }
-      });
-
-      logger.info(`Webhook Pakasir - Berhasil memproses pembayaran untuk order_id: ${order_id}`);
-      res.status(200).json({ success: true, message: "Webhook berhasil diproses" });
-    } catch (error: any) {
-      logger.error(`Webhook Pakasir gagal untuk order_id: ${req.body?.order_id || "unknown"} - Error: ${error.message}`);
-      next(error);
-    }
-  }
-
-  async simulatePakasirPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { orderId, amount } = req.body;
-
-      if (!orderId || !amount) {
-        res.status(400).json({ success: false, message: "orderId dan amount wajib diisi" });
-        return;
-      }
-
-      const projectSlug = process.env.PAKASIR_PROJECT_SLUG || "depodomain";
-      const apiKey = process.env.PAKASIR_API_KEY || "xxx123";
-
-      const simulateUrl = "https://app.pakasir.com/api/paymentsimulation";
-      const payload = {
-        project: projectSlug,
-        order_id: orderId,
-        amount: Number(amount),
-        api_key: apiKey,
-      };
-
-      let statusSimulated = false;
-
-      try {
-        const response = await fetch(simulateUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (response.ok) {
-          statusSimulated = true;
-        }
-      } catch (err) {
-        console.error("Gagal menghubungi API simulasi Pakasir:", err);
-      }
-
-      if (!statusSimulated) {
-        logger.warn("Failing back ke simulasi pembayaran lokal untuk Pakasir.");
-        const invoices = await prisma.invoice.findMany({
-          where: {
-            midtransOrderId: {
-              startsWith: orderId,
-            },
-          },
-          include: { student: true },
-        });
-
-        if (invoices.length > 0) {
-          await prisma.$transaction(async (tx) => {
-            for (const invoice of invoices) {
-              if ((invoice.status as any) === "PAID") continue;
-
-              await tx.invoice.update({
-                where: { id: invoice.id },
-                data: {
-                  status: "PAID" as any,
-                },
-              });
-
-              let categoryName = "SPP";
-              if (invoice.invoiceType === "UANG_PENGEMBANGAN") categoryName = "Uang Pengembangan";
-              else if (invoice.invoiceType === "DAFTAR_ULANG") categoryName = "Daftar Ulang";
-              else if (invoice.invoiceType === "UANG_PERALATAN") categoryName = "Uang Peralatan";
-              else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
-              else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
-              else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
-              else if (invoice.invoiceType === "KEGIATAN") categoryName = "Uang Kegiatan";
-              else if (invoice.invoiceType === "LAINNYA") categoryName = "Lain-lain";
-
-              let category = await tx.category.findFirst({
+            let txAmount = invoice.amount;
+            if (!txAmount || txAmount <= 0) {
+              const tariff = await tx.sppTariff.findFirst({
                 where: {
-                  name: { equals: categoryName, mode: "insensitive" },
-                  type: "INCOME",
+                  schoolUnitId: invoice.student.schoolUnitId,
+                  enrollmentYear: invoice.student.enrollmentYear,
                 },
               });
-              if (!category) {
-                category = await tx.category.create({
-                  data: {
-                    name: categoryName,
-                    type: "INCOME",
-                    schoolUnitId: null,
-                  },
+              if (tariff) {
+                const disc = invoice.student.discountAmount || 0;
+                txAmount = Math.max(0, tariff.amount - disc);
+                await tx.invoice.update({
+                  where: { id: invoice.id },
+                  data: { amount: txAmount, baseAmount: tariff.amount, discountApplied: disc },
                 });
               }
-
-              await tx.transaction.create({
-                data: {
-                  type: "INCOME" as any,
-                  categoryId: category.id,
-                  paymentMethod: "MIDTRANS" as any,
-                  amount: invoice.amount,
-                  description: `Pembayaran ${categoryName} online (Simulasi Pakasir) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
-                  schoolUnitId: invoice.student.schoolUnitId,
-                  recordedById: null,
-                  invoiceId: invoice.id,
-                },
-              });
-            }
-          });
-        }
-      }
-
-      res.status(200).json({
-        success: true,
-        message: "Simulasi pembayaran Pakasir berhasil dipicu",
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  }
-
-  async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { id } = req.params as { id: string };
-      const { status } = req.body;
-
-      if (!status || !["PAID", "PENDING"].includes(status)) {
-        res.status(400).json({ success: false, message: "Status tidak valid. Gunakan PAID atau PENDING." });
-        return;
-      }
-
-      const invoice = await prisma.invoice.findUnique({
-        where: { id: parseInt(id) },
-        include: { student: true },
-      });
-
-      if (!invoice) {
-        res.status(404).json({ success: false, message: "Tagihan tidak ditemukan" });
-        return;
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const updatedInvoice = await tx.invoice.update({
-          where: { id: invoice.id },
-          data: { status: status as any },
-        });
-
-        if (status === "PAID") {
-          const existingTx = await tx.transaction.findFirst({
-            where: { invoiceId: invoice.id, type: "INCOME" as any },
-          });
-
-          if (!existingTx) {
-            let category = await tx.category.findFirst({
-              where: {
-                name: { equals: "SPP", mode: "insensitive" },
-                type: "INCOME",
-              },
-            });
-            if (!category) {
-              category = await tx.category.create({
-                data: {
-                  name: "SPP",
-                  type: "INCOME",
-                  schoolUnitId: null,
-                },
-              });
             }
 
             await tx.transaction.create({
               data: {
                 type: "INCOME" as any,
                 categoryId: category.id,
-                paymentMethod: "CASH" as any,
-                amount: invoice.amount,
-                description: `Pembaruan status lunas manual oleh Admin SPP bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
+                paymentMethod: chosenMethod as any,
+                amount: txAmount,
+                description: `Pembaruan status lunas manual (${chosenMethod === "TRANSFER" ? "Transfer Bank" : "Tunai"}) oleh Admin SPP bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${invoice.student.name}`,
                 schoolUnitId: invoice.student.schoolUnitId,
                 recordedById: req.user?.id || null,
                 invoiceId: invoice.id,

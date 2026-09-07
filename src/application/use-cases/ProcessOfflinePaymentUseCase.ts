@@ -19,8 +19,17 @@ export class ProcessOfflinePaymentUseCase {
     recordedById: number;
     invoiceType?: InvoiceType | undefined;
     paymentAmount?: number | undefined;
+    paymentMethod?: PaymentMethod | undefined;
   }) {
-    const { studentId, month, year, recordedById, invoiceType = InvoiceType.SPP, paymentAmount } = input;
+    const {
+      studentId,
+      month,
+      year,
+      recordedById,
+      invoiceType = InvoiceType.SPP,
+      paymentAmount,
+      paymentMethod = PaymentMethod.CASH,
+    } = input;
 
     // 1. Validasi Eksistensi Invoice
     const existingInvoice = await this.invoiceRepository.findByUniqueComposite(
@@ -229,12 +238,13 @@ export class ProcessOfflinePaymentUseCase {
       });
     }
 
+    const isTransfer = paymentMethod === PaymentMethod.TRANSFER;
     const transactionData = {
       type: CategoryType.INCOME,
       categoryId: category.id,
-      paymentMethod: PaymentMethod.CASH,
+      paymentMethod,
       amount: paymentTxAmount,
-      description: `Pembayaran ${categoryName} offline tunai bulan ${month} tahun ${year} untuk siswa ${student.name}`,
+      description: `Pembayaran ${categoryName} offline ${isTransfer ? "transfer bank" : "tunai"} bulan ${month} tahun ${year} untuk siswa ${student.name}`,
       schoolUnitId: student.schoolUnitId,
       recordedById,
     };
