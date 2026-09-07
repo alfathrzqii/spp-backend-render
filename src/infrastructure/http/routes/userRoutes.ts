@@ -1,216 +1,38 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
-import prisma from "../../database/prisma.js";
-import bcrypt from "bcrypt";
-import { logActivity } from "../../utils/activityLogger.js";
+import { PrismaUserRepository } from "../../database/PrismaUserRepository.js";
+import { PasswordHasher } from "../../services/PasswordHasher.js";
+import { GetUsersUseCase } from "../../../application/use-cases/GetUsersUseCase.js";
+import { CreateUserUseCase } from "../../../application/use-cases/CreateUserUseCase.js";
+import { UpdateUserUseCase } from "../../../application/use-cases/UpdateUserUseCase.js";
+import { DeleteUserUseCase } from "../../../application/use-cases/DeleteUserUseCase.js";
+import { UserController } from "../controllers/UserController.js";
 
 const router = Router();
 
-// Only SUPER_ADMIN can manage users
+// Inisialisasi Dependensi
+const userRepository = new PrismaUserRepository();
+const passwordHasher = new PasswordHasher();
+
+const getUsersUseCase = new GetUsersUseCase(userRepository);
+const createUserUseCase = new CreateUserUseCase(userRepository, passwordHasher);
+const updateUserUseCase = new UpdateUserUseCase(userRepository, passwordHasher);
+const deleteUserUseCase = new DeleteUserUseCase(userRepository);
+
+const userController = new UserController(
+  getUsersUseCase,
+  createUserUseCase,
+  updateUserUseCase,
+  deleteUserUseCase
+);
+
+// Rute Pengelolaan Pengguna (Hanya SUPER_ADMIN)
 router.use(authMiddleware, roleMiddleware(["SUPER_ADMIN"]));
 
-router.get("/", async (req, res, next) => {
-  try {
-    const roleFilter = req.query.role || undefined;
-    const where: any = {};
-    if (roleFilter) where.role = roleFilter;
-
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phoneNumber: true,
-        role: true,
-        schoolUnitId: true,
-        className: true,
-        schoolUnit: { select: { name: true } },
-      },
-      orderBy: { name: "asc" },
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Daftar pengguna berhasil diambil",
-      data: users,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post("/", async (req, res, next) => {
-  try {
-    const { name, email, phoneNumber, password, role, schoolUnitId, className } = req.body;
-
-    if (!name || !phoneNumber || !password || !role) {
-      res.status(400).json({ success: false, message: "Nama, No HP, Password, dan Peran wajib diisi" });
-      return;
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { phoneNumber },
-    });
-
-    if (existing) {
-      res.status(400).json({ success: false, message: "Nomor HP sudah digunakan oleh akun lain" });
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        email: email || null,
-        phoneNumber,
-        password: passwordHash,
-        role,
-        schoolUnitId: schoolUnitId ? Number(schoolUnitId) : null,
-        className: role === "WALI_KELAS" ? className : null,
-      },
-    });
-
-    // Log Aktivitas
-    if (req.user) {
-      await logActivity(
-        req.user.id,
-        "CREATE_USER",
-        `Membuat akun pengguna baru: ${name} (${role}) dengan No HP ${phoneNumber}`,
-        req
-      );
-    }
-
-    res.status(201).json({
-      success: true,
-      message: "Akun pengguna berhasil dibuat",
-      data: {
-        id: newUser.id,
-        name: newUser.name,
-        phoneNumber: newUser.phoneNumber,
-        role: newUser.role,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.put("/:id", async (req, res, next) => {
-  try {
-    const userId = Number(req.params.id);
-    const { name, email, phoneNumber, password, role, schoolUnitId, className } = req.body;
-
-    const existing = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!existing) {
-      res.status(404).json({ success: false, message: "User tidak ditemukan" });
-      return;
-    }
-
-    if (phoneNumber && phoneNumber !== existing.phoneNumber) {
-      const dup = await prisma.user.findUnique({ where: { phoneNumber } });
-      if (dup) {
-        res.status(400).json({ success: false, message: "Nomor HP sudah digunakan oleh akun lain" });
-        return;
-      }
-    }
-
-    const data: any = {
-      name: name || existing.name,
-      email: email !== undefined ? email : existing.email,
-      phoneNumber: phoneNumber || existing.phoneNumber,
-      role: role || existing.role,
-      schoolUnitId: schoolUnitId !== undefined ? (schoolUnitId ? Number(schoolUnitId) : null) : existing.schoolUnitId,
-      className: role === "WALI_KELAS" ? (className || (existing as any).className) : null,
-    };
-
-    if (password && password.trim().length > 0) {
-      data.password = await bcrypt.hash(password, 10);
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data,
-    });
-
-    // Log Aktivitas
-    if (req.user) {
-      await logActivity(
-        req.user.id,
-        "UPDATE_USER",
-        `Mengupdate data akun pengguna: ${updatedUser.name} (ID: ${userId})`,
-        req
-      );
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Data pengguna berhasil diperbarui",
-      data: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        phoneNumber: updatedUser.phoneNumber,
-        role: updatedUser.role,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.delete("/:id", async (req, res, next) => {
-  try {
-    const userId = Number(req.params.id);
-    const currentUser = req.user!;
-
-    if (currentUser.id === userId) {
-      res.status(400).json({ success: false, message: "Anda tidak diizinkan untuk menghapus akun Anda sendiri" });
-      return;
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!existing) {
-      res.status(404).json({ success: false, message: "User tidak ditemukan" });
-      return;
-    }
-
-    if (existing.role === "PARENT") {
-      const studentCount = await prisma.student.count({
-        where: { parentId: userId },
-      });
-      if (studentCount > 0) {
-        res.status(400).json({ success: false, message: "Gagal menghapus: Akun wali murid masih terikat dengan data siswa aktif" });
-        return;
-      }
-    }
-
-    await prisma.user.delete({ where: { id: userId } });
-
-    // Log Aktivitas
-    if (req.user) {
-      await logActivity(
-        req.user.id,
-        "DELETE_USER",
-        `Menghapus akun pengguna: ${existing.name} (ID: ${userId}, Role: ${existing.role})`,
-        req
-      );
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Akun pengguna berhasil dihapus",
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+router.get("/", userController.getAll.bind(userController));
+router.post("/", userController.create.bind(userController));
+router.put("/:id", userController.update.bind(userController));
+router.delete("/:id", userController.delete.bind(userController));
 
 export default router;
