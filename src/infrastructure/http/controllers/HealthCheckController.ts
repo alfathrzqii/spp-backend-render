@@ -1,16 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
-import prisma from "../../database/prisma.js";
+import type { IDatabaseHealthIndicator } from "../../../application/ports/IDatabaseHealthIndicator.js";
 
 export class HealthCheckController {
+  constructor(private dbHealthIndicator: IDatabaseHealthIndicator) {}
+
   async check(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      let isDbHealthy = false;
-      try {
-        await prisma.$queryRaw`SELECT 1`;
-        isDbHealthy = true;
-      } catch {
-        isDbHealthy = false;
-      }
+      const isDbHealthy = await this.dbHealthIndicator.isHealthy();
 
       const status = isDbHealthy ? "ok" : "error";
       const statusCode = isDbHealthy ? 200 : 503;
