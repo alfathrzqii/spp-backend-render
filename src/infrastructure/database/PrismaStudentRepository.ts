@@ -298,4 +298,84 @@ export class PrismaStudentRepository implements IStudentRepository {
       where: { id },
     });
   }
+
+  async importStudentWithParent(data: {
+    studentNumber: string;
+    name: string;
+    className: string;
+    schoolUnitId: number;
+    enrollmentYear: number;
+    discountAmount: number;
+    discountEquipment: number;
+    discountExtracurricular: number;
+    birthDate?: string;
+    parentName: string;
+    parentPhoneNumber: string;
+    parentEmail?: string;
+    parentPasswordHash: string;
+  }): Promise<{ student: Student; createdParent: boolean }> {
+    return await this.prisma.$transaction(async (tx) => {
+      let createdParent = false;
+      let parentUser = await tx.user.findUnique({
+        where: { phoneNumber: data.parentPhoneNumber },
+      });
+
+      if (!parentUser) {
+        parentUser = await tx.user.create({
+          data: {
+            name: data.parentName,
+            email: data.parentEmail || `${data.parentPhoneNumber}@sekolah.id`,
+            phoneNumber: data.parentPhoneNumber,
+            password: data.parentPasswordHash,
+            role: "PARENT",
+            schoolUnitId: null,
+          },
+        });
+        createdParent = true;
+      }
+
+      const existingStudent = await tx.student.findUnique({
+        where: { studentNumber: data.studentNumber },
+      });
+
+      let studentResult: any;
+      if (existingStudent) {
+        studentResult = await tx.student.update({
+          where: { studentNumber: data.studentNumber },
+          data: {
+            name: data.name,
+            className: data.className,
+            schoolUnitId: data.schoolUnitId,
+            enrollmentYear: data.enrollmentYear,
+            discountAmount: data.discountAmount,
+            discountEquipment: data.discountEquipment,
+            discountExtracurricular: data.discountExtracurricular,
+            registrationStatus: "NAIK_KELAS",
+            parentId: parentUser.id,
+          },
+        });
+      } else {
+        studentResult = await tx.student.create({
+          data: {
+            studentNumber: data.studentNumber,
+            name: data.name,
+            className: data.className,
+            schoolUnitId: data.schoolUnitId,
+            enrollmentYear: data.enrollmentYear,
+            discountAmount: data.discountAmount,
+            discountEquipment: data.discountEquipment,
+            discountExtracurricular: data.discountExtracurricular,
+            registrationStatus: "BARU",
+            parentId: parentUser.id,
+          },
+        });
+      }
+
+      return {
+        student: this.mapToDomain(studentResult),
+        createdParent,
+      };
+    });
+  }
 }
+

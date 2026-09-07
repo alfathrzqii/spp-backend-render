@@ -5,6 +5,7 @@ import { StudentController } from "../controllers/StudentController.js";
 import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.js";
 import { PrismaUserRepository } from "../../database/PrismaUserRepository.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
+import { PrismaSchoolUnitRepository } from "../../database/PrismaSchoolUnitRepository.js";
 import { PasswordHasher } from "../../services/PasswordHasher.js";
 import { CreateStudentUseCase } from "../../../application/use-cases/CreateStudentUseCase.js";
 import { GetStudentsUseCase } from "../../../application/use-cases/GetStudentsUseCase.js";
@@ -20,6 +21,7 @@ const router = Router();
 const studentRepo = new PrismaStudentRepository();
 const userRepo = new PrismaUserRepository();
 const sppTariffRepo = new PrismaSppTariffRepository();
+const schoolUnitRepo = new PrismaSchoolUnitRepository();
 
 // Services
 const passwordHasher = new PasswordHasher();
@@ -34,7 +36,11 @@ const createStudentUseCase = new CreateStudentUseCase(
 const getStudentsUseCase = new GetStudentsUseCase(studentRepo);
 const updateStudentUseCase = new UpdateStudentUseCase(studentRepo);
 const deleteStudentUseCase = new DeleteStudentUseCase(studentRepo);
-const importStudentsUseCase = new ImportStudentsUseCase(passwordHasher);
+const importStudentsUseCase = new ImportStudentsUseCase(
+  passwordHasher,
+  studentRepo,
+  schoolUnitRepo
+);
 
 // Controller
 const studentController = new StudentController(

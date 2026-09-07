@@ -44,4 +44,21 @@ export interface IStudentRepository {
     }
   ): Promise<Student>;
   delete(id: number): Promise<void>;
+  importStudentWithParent(data: {
+    studentNumber: string;
+
+    name: string;
+    className: string;
+    schoolUnitId: number;
+    enrollmentYear: number;
+    discountAmount: number;
+    discountEquipment: number;
+    discountExtracurricular: number;
+    birthDate?: string;
+    parentName: string;
+    parentPhoneNumber: string;
+    parentEmail?: string;
+    parentPasswordHash: string;
+  }): Promise<{ student: Student; createdParent: boolean }>;
 }
+

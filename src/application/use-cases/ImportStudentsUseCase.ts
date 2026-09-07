@@ -1,5 +1,6 @@
 import type { IPasswordHasher } from "../ports/IPasswordHasher.js";
-import prisma from "../../infrastructure/database/prisma.js";
+import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { ISchoolUnitRepository } from "../../domain/repositories/ISchoolUnitRepository.js";
 
 export interface ImportStudentRow {
   nis?: string | number;
@@ -36,7 +37,11 @@ export interface ImportStudentsResult {
 }
 
 export class ImportStudentsUseCase {
-  constructor(private passwordHasher: IPasswordHasher) {}
+  constructor(
+    private passwordHasher: IPasswordHasher,
+    private studentRepository: IStudentRepository,
+    private schoolUnitRepository: ISchoolUnitRepository
+  ) {}
 
   private formatBirthDateToPassword(birthDate: string): string {
     if (!birthDate) return "parent123";
@@ -118,75 +123,26 @@ export class ImportStudentsUseCase {
           throw new Error(`Akses ditolak: Baris ${index + 1} berada pada unit yang berbeda dari kewenangan Anda`);
         }
 
-        await prisma.$transaction(async (tx) => {
-          // Ensure school unit exists in master data to avoid FK constraint errors
-          const existingUnit = await tx.schoolUnit.findUnique({
-            where: { id: schoolUnitId },
-          });
-          if (!existingUnit) {
-            await tx.schoolUnit.create({
-              data: {
-                id: schoolUnitId,
-                name: unitName.toUpperCase() || "UNIT",
-              },
-            });
-          }
+        // Ensure school unit exists in master data to avoid FK constraint errors
+        await this.schoolUnitRepository.ensureExists(schoolUnitId, unitName);
 
-          let parentUser = await tx.user.findUnique({
-            where: { phoneNumber: parentPhoneNumber },
-          });
+        const defaultPassword = this.formatBirthDateToPassword(birthDate);
+        const passwordHash = await this.passwordHasher.hash(defaultPassword);
 
-          if (!parentUser) {
-            const defaultPassword = this.formatBirthDateToPassword(birthDate);
-            const passwordHash = await this.passwordHasher.hash(defaultPassword);
-
-            parentUser = await tx.user.create({
-              data: {
-                name: parentName,
-                email: parentEmail || `${parentPhoneNumber}@sekolah.id`,
-                phoneNumber: parentPhoneNumber,
-                password: passwordHash,
-                role: "PARENT",
-                schoolUnitId: null,
-              },
-            });
-          }
-
-          const existingStudent = await tx.student.findUnique({
-            where: { studentNumber },
-          });
-
-          if (existingStudent) {
-            await tx.student.update({
-              where: { studentNumber },
-              data: {
-                name,
-                className,
-                schoolUnitId,
-                enrollmentYear,
-                discountAmount,
-                discountEquipment,
-                discountExtracurricular,
-                registrationStatus: "NAIK_KELAS",
-                parentId: parentUser.id,
-              },
-            });
-          } else {
-            await tx.student.create({
-              data: {
-                studentNumber,
-                name,
-                className,
-                schoolUnitId,
-                enrollmentYear,
-                discountAmount,
-                discountEquipment,
-                discountExtracurricular,
-                registrationStatus: "BARU",
-                parentId: parentUser.id,
-              },
-            });
-          }
+        await this.studentRepository.importStudentWithParent({
+          studentNumber,
+          name,
+          className,
+          schoolUnitId,
+          enrollmentYear,
+          discountAmount,
+          discountEquipment,
+          discountExtracurricular,
+          birthDate,
+          parentName,
+          parentPhoneNumber,
+          parentEmail,
+          parentPasswordHash: passwordHash,
         });
 
         successCount++;
