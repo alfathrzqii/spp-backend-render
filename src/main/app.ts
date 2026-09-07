@@ -16,6 +16,7 @@ import extraEquipmentTariffRoutes from "../infrastructure/http/routes/extraEquip
 import reRegistrationTariffRoutes from "../infrastructure/http/routes/reRegistrationTariffRoutes.js";
 import sdExtracurricularRoutes from "../infrastructure/http/routes/sdExtracurricularRoutes.js";
 import fulldayTariffRoutes from "../infrastructure/http/routes/fulldayTariffRoutes.js";
+import healthRoutes from "../infrastructure/http/routes/healthRoutes.js";
 
 const app = express();
 
@@ -26,6 +27,8 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(cookieParser());
 
 // Routes
+app.use("/health", healthRoutes);
+app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/spp-tariffs", sppTariffRoutes);
 app.use("/api/categories", categoryRoutes);
