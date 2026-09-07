@@ -294,4 +294,162 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       });
     });
   }
+
+  async findByOrderIdPrefix(orderIdPrefix: string): Promise<any[]> {
+    return await this.prisma.invoice.findMany({
+      where: {
+        midtransOrderId: {
+          startsWith: orderIdPrefix,
+        },
+      },
+      include: {
+        student: {
+          select: { id: true, name: true, schoolUnitId: true, studentNumber: true },
+        },
+      },
+    });
+  }
+
+  async findPendingBatchInvoices(filter?: {
+    studentNumber?: string | undefined;
+    schoolUnitId?: number | undefined;
+  }): Promise<any[]> {
+    const where: any = {
+      status: "PENDING" as any,
+      midtransOrderId: {
+        not: null,
+        startsWith: "BATCH-",
+      },
+    };
+
+    if (filter?.studentNumber) {
+      where.student = { studentNumber: filter.studentNumber };
+    } else if (filter?.schoolUnitId) {
+      where.student = { schoolUnitId: filter.schoolUnitId };
+    }
+
+    return await this.prisma.invoice.findMany({
+      where,
+      include: {
+        student: {
+          select: { id: true, name: true, studentNumber: true, schoolUnitId: true },
+        },
+      },
+    });
+  }
+
+  async upsertPendingBatchInvoices(
+    studentId: number,
+    baseOrderId: string,
+    items: Array<{
+      month: number;
+      year: number;
+      invoiceType: InvoiceType;
+      baseAmount: number;
+      discountApplied: number;
+      amountToPay: number;
+      existingInvoiceId?: number | undefined;
+    }>
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      let index = 0;
+      for (const item of items) {
+        const uniqueOrderId = `${baseOrderId}-${index++}`;
+
+        if (item.existingInvoiceId) {
+          await tx.invoice.update({
+            where: { id: item.existingInvoiceId },
+            data: {
+              midtransOrderId: uniqueOrderId,
+              baseAmount: item.baseAmount,
+              discountApplied: item.discountApplied,
+              amount: item.amountToPay,
+            },
+          });
+        } else {
+          await tx.invoice.create({
+            data: {
+              studentId,
+              invoiceType: item.invoiceType as any,
+              month: item.month,
+              year: item.year,
+              baseAmount: item.baseAmount,
+              discountApplied: item.discountApplied,
+              amount: item.amountToPay,
+              status: "PENDING" as any,
+              midtransOrderId: uniqueOrderId,
+            },
+          });
+        }
+      }
+    });
+  }
+
+  async processPaidInvoicesOnline(
+    invoices: any[],
+    source: string,
+    paymentMethod: PaymentMethod = "MIDTRANS" as any
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      for (const invoice of invoices) {
+        if ((invoice.status as any) === "PAID") continue;
+
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: "PAID" as any,
+          },
+        });
+
+        const existingTx = await tx.transaction.findFirst({
+          where: { invoiceId: invoice.id, type: "INCOME" as any },
+        });
+
+        if (!existingTx) {
+          let categoryName = "SPP";
+          if (invoice.invoiceType === "UANG_PENGEMBANGAN") categoryName = "Uang Pengembangan";
+          else if (invoice.invoiceType === "DAFTAR_ULANG") categoryName = "Daftar Ulang";
+          else if (invoice.invoiceType === "UANG_PERALATAN") categoryName = "Uang Peralatan";
+          else if (invoice.invoiceType === "EKSTRAKURIKULER") categoryName = "Uang Ekstrakurikuler";
+          else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
+          else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
+          else if (invoice.invoiceType === "KEGIATAN") categoryName = "Uang Kegiatan";
+          else if (invoice.invoiceType === "LAINNYA") categoryName = "Lain-lain";
+
+          let category = await tx.category.findFirst({
+            where: {
+              name: { equals: categoryName, mode: "insensitive" },
+              type: "INCOME",
+            },
+          });
+          if (!category) {
+            category = await tx.category.create({
+              data: {
+                name: categoryName,
+                type: "INCOME",
+                schoolUnitId: null,
+              },
+            });
+          }
+
+          const studentName = invoice.student?.name || "Siswa";
+          const schoolUnitId = invoice.student?.schoolUnitId || null;
+
+          await tx.transaction.create({
+            data: {
+              type: "INCOME" as any,
+              categoryId: category.id,
+              paymentMethod: paymentMethod as any,
+              amount: invoice.amount,
+              description: `Pembayaran ${categoryName} online (${source}) bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${studentName}`,
+              schoolUnitId,
+              recordedById: null,
+              invoiceId: invoice.id,
+            },
+          });
+        }
+      }
+    });
+  }
 }
+

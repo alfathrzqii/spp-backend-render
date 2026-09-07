@@ -7,24 +7,35 @@ import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
 import { PrismaExtraEquipmentTariffRepository } from "../../database/PrismaExtraEquipmentTariffRepository.js";
 import { PrismaFulldayTariffRepository } from "../../database/PrismaFulldayTariffRepository.js";
+import { PrismaReRegistrationTariffRepository } from "../../database/PrismaReRegistrationTariffRepository.js";
+import { PakasirService } from "../../services/PakasirService.js";
+import { PakasirController } from "../controllers/PakasirController.js";
 import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
 import { GetAllInvoicesUseCase } from "../../../application/use-cases/GetAllInvoicesUseCase.js";
 import { UpdateInvoiceStatusUseCase } from "../../../application/use-cases/UpdateInvoiceStatusUseCase.js";
 import { DeleteInvoiceUseCase } from "../../../application/use-cases/DeleteInvoiceUseCase.js";
+import { CreatePakasirTransactionUseCase } from "../../../application/use-cases/CreatePakasirTransactionUseCase.js";
+import { CheckPakasirStatusUseCase } from "../../../application/use-cases/CheckPakasirStatusUseCase.js";
+import { HandlePakasirWebhookUseCase } from "../../../application/use-cases/HandlePakasirWebhookUseCase.js";
+import { SyncPakasirTransactionsUseCase } from "../../../application/use-cases/SyncPakasirTransactionsUseCase.js";
+import { SimulatePakasirPaymentUseCase } from "../../../application/use-cases/SimulatePakasirPaymentUseCase.js";
+import { PayOnlineSimulatedUseCase } from "../../../application/use-cases/PayOnlineSimulatedUseCase.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
 import prisma from "../../database/prisma.js";
 
 const router = Router();
 
-// Repositories
+// Repositories & Services
 const invoiceRepo = new PrismaInvoiceRepository();
 const studentRepo = new PrismaStudentRepository();
 const sppTariffRepo = new PrismaSppTariffRepository();
 const extraEquipmentTariffRepo = new PrismaExtraEquipmentTariffRepository();
 const fulldayTariffRepo = new PrismaFulldayTariffRepository(prisma);
+const reRegistrationTariffRepo = new PrismaReRegistrationTariffRepository();
+const pakasirService = new PakasirService();
 
-// Use Cases
+// Core Invoice Use Cases
 const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
   invoiceRepo,
   studentRepo,
@@ -36,13 +47,61 @@ const getAllInvoicesUseCase = new GetAllInvoicesUseCase(invoiceRepo);
 const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, sppTariffRepo);
 const deleteInvoiceUseCase = new DeleteInvoiceUseCase(invoiceRepo);
 
-// Controller
+// Pakasir & Online Payment Use Cases
+const createPakasirTransactionUseCase = new CreatePakasirTransactionUseCase(
+  invoiceRepo,
+  studentRepo,
+  sppTariffRepo,
+  pakasirService,
+  reRegistrationTariffRepo,
+  extraEquipmentTariffRepo,
+  fulldayTariffRepo
+);
+const checkPakasirStatusUseCase = new CheckPakasirStatusUseCase(
+  invoiceRepo,
+  studentRepo,
+  pakasirService
+);
+const handlePakasirWebhookUseCase = new HandlePakasirWebhookUseCase(
+  invoiceRepo,
+  studentRepo
+);
+const syncPakasirTransactionsUseCase = new SyncPakasirTransactionsUseCase(
+  invoiceRepo,
+  pakasirService
+);
+const simulatePakasirPaymentUseCase = new SimulatePakasirPaymentUseCase(
+  invoiceRepo,
+  studentRepo,
+  pakasirService
+);
+const payOnlineSimulatedUseCase = new PayOnlineSimulatedUseCase(
+  invoiceRepo,
+  studentRepo,
+  sppTariffRepo,
+  reRegistrationTariffRepo,
+  extraEquipmentTariffRepo
+);
+
+// Controllers
+const pakasirController = new PakasirController(
+  createPakasirTransactionUseCase,
+  checkPakasirStatusUseCase,
+  handlePakasirWebhookUseCase,
+  syncPakasirTransactionsUseCase,
+  simulatePakasirPaymentUseCase,
+  payOnlineSimulatedUseCase,
+  studentRepo
+);
+
 const invoiceController = new InvoiceController(
   processOfflinePaymentUseCase,
   studentRepo,
   getAllInvoicesUseCase,
   updateInvoiceStatusUseCase,
-  deleteInvoiceUseCase
+  deleteInvoiceUseCase,
+  pakasirController,
+  invoiceRepo
 );
 
 // Routes
@@ -82,35 +141,35 @@ router.get(
 router.post(
   "/pay-online-simulated",
   authMiddleware,
-  invoiceController.payOnlineSimulated.bind(invoiceController)
+  pakasirController.payOnlineSimulated.bind(pakasirController)
 );
 
 // Pakasir Payment Gateway Routes
 router.post(
   "/pakasir/create",
-  invoiceController.createPakasirTransaction.bind(invoiceController)
+  pakasirController.createPakasirTransaction.bind(pakasirController)
 );
 
 router.get(
   "/pakasir/status",
-  invoiceController.checkPakasirStatus.bind(invoiceController)
+  pakasirController.checkPakasirStatus.bind(pakasirController)
 );
 
 router.post(
   "/pakasir/webhook",
-  invoiceController.handlePakasirWebhook.bind(invoiceController)
+  pakasirController.handlePakasirWebhook.bind(pakasirController)
 );
 
 router.post(
   "/pakasir/simulate",
-  invoiceController.simulatePakasirPayment.bind(invoiceController)
+  pakasirController.simulatePakasirPayment.bind(pakasirController)
 );
 
 router.post(
   "/pakasir/sync",
   authMiddleware,
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN", "PARENT"]),
-  invoiceController.syncPakasirTransactions.bind(invoiceController)
+  pakasirController.syncPakasirTransactions.bind(pakasirController)
 );
 
 router.put(
