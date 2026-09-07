@@ -3,6 +3,7 @@ import type {
   IActivityLogRepository,
   FindActivityLogsParams,
   ActivityLogWithUser,
+  CreateActivityLogDTO,
 } from "../../domain/repositories/IActivityLogRepository.js";
 
 export class PrismaActivityLogRepository implements IActivityLogRepository {
@@ -63,5 +64,17 @@ export class PrismaActivityLogRepository implements IActivityLogRepository {
       logs: logs as ActivityLogWithUser[],
       total,
     };
+  }
+
+  async create(data: CreateActivityLogDTO): Promise<void> {
+    await prisma.activityLog.create({
+      data: {
+        userId: data.userId,
+        action: data.action,
+        description: data.description,
+        ipAddress: data.ipAddress ?? null,
+        userAgent: data.userAgent ?? null,
+      },
+    });
   }
 }

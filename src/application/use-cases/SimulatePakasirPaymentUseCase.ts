@@ -1,8 +1,8 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { IPakasirService } from "../ports/IPakasirService.js";
+import type { ILogger } from "../../domain/services/ILogger.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
-import { logger } from "../../infrastructure/services/WinstonLogger.js";
 
 export interface SimulatePakasirPaymentInput {
   orderId: string;
@@ -13,7 +13,8 @@ export class SimulatePakasirPaymentUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
     private studentRepository: IStudentRepository,
-    private pakasirService: IPakasirService
+    private pakasirService: IPakasirService,
+    private logger?: ILogger
   ) {}
 
   async execute(input: SimulatePakasirPaymentInput) {
@@ -54,7 +55,7 @@ export class SimulatePakasirPaymentUseCase {
     // Selalu perbarui status invoice dan catat transaksi kasir secara lokal
     await this.invoiceRepository.processPaidInvoicesOnline(invoices, "Simulasi");
 
-    logger.info(`Simulasi pembayaran Pakasir berhasil untuk order: ${orderId} (${invoices.length} tagihan)`);
+    this.logger?.info(`Simulasi pembayaran Pakasir berhasil untuk order: ${orderId} (${invoices.length} tagihan)`);
 
     return {
       orderId,

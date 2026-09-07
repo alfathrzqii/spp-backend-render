@@ -1,6 +1,8 @@
 import type { Request } from "express";
-import prisma from "../database/prisma.js";
+import { PrismaActivityLogRepository } from "../database/PrismaActivityLogRepository.js";
 import { logger } from "../services/WinstonLogger.js";
+
+const activityLogRepo = new PrismaActivityLogRepository();
 
 export async function logActivity(
   userId: number,
@@ -10,6 +12,7 @@ export async function logActivity(
 ): Promise<void> {
   try {
     let ipAddress: string | null = null;
+    let userAgent: string | null = null;
     if (req) {
       const forwarded = req.headers["x-forwarded-for"];
       let rawIp: string | null = null;
@@ -24,15 +27,16 @@ export async function logActivity(
       if (rawIp !== null) {
         ipAddress = rawIp.split(",")[0]?.trim() || null;
       }
+
+      userAgent = (req.headers["user-agent"] as string) || null;
     }
       
-    await prisma.activityLog.create({
-      data: {
-        userId,
-        action,
-        description,
-        ipAddress,
-      },
+    await activityLogRepo.create({
+      userId,
+      action,
+      description,
+      ipAddress,
+      userAgent,
     });
   } catch (error: any) {
     logger.error(`Gagal mencatat log aktivitas: ${error.message}`);

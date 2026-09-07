@@ -21,9 +21,18 @@ export interface ActivityLogWithUser {
   };
 }
 
+export interface CreateActivityLogDTO {
+  userId: number;
+  action: string;
+  description: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
 export interface IActivityLogRepository {
   findManyWithCount(params: FindActivityLogsParams): Promise<{
     logs: ActivityLogWithUser[];
     total: number;
   }>;
+  create(data: CreateActivityLogDTO): Promise<void>;
 }

@@ -1,6 +1,6 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IPakasirService } from "../ports/IPakasirService.js";
-import { logger } from "../../infrastructure/services/WinstonLogger.js";
+import type { ILogger } from "../../domain/services/ILogger.js";
 
 export interface SyncPakasirTransactionsInput {
   studentNumber?: string | undefined;
@@ -10,7 +10,8 @@ export interface SyncPakasirTransactionsInput {
 export class SyncPakasirTransactionsUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
-    private pakasirService: IPakasirService
+    private pakasirService: IPakasirService,
+    private logger?: ILogger
   ) {}
 
   async execute(input: SyncPakasirTransactionsInput) {
@@ -48,7 +49,7 @@ export class SyncPakasirTransactionsUseCase {
       if (detailData?.transaction?.status === "completed") {
         await this.invoiceRepository.processPaidInvoicesOnline(invs, "Manual-Sync");
         syncedCount += invs.length;
-        logger.info(`SyncPakasirTransactionsUseCase: Berhasil menyinkronkan ${invs.length} invoice untuk order ${baseOrderId}`);
+        this.logger?.info(`SyncPakasirTransactionsUseCase: Berhasil menyinkronkan ${invs.length} invoice untuk order ${baseOrderId}`);
       }
     }
 
