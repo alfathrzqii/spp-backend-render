@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import { sppTariffSchema, updateSppTariffSchema } from "../schemas/sppTariffSchema.js";
 import { SppTariffController } from "../controllers/SppTariffController.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";

@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import httpLogger from "../infrastructure/http/middleware/httpLogger.js";
+import httpLogger from "../infrastructure/http/middlewares/httpLogger.js";
 import { logger } from "../infrastructure/services/WinstonLogger.js";
 import authRoutes from "../infrastructure/http/routes/authRoutes.js";
 import sppTariffRoutes from "../infrastructure/http/routes/sppTariffRoutes.js";

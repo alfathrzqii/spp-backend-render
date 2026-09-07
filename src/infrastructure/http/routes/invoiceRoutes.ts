@@ -6,7 +6,7 @@ import { PrismaInvoiceRepository } from "../../database/PrismaInvoiceRepository.
 import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.js";
 import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
 import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
 
 const router = Router();

@@ -8,7 +8,7 @@ import { CreateExtraEquipmentTariffUseCase } from "../../../application/use-case
 import { GetExtraEquipmentTariffsUseCase } from "../../../application/use-cases/GetExtraEquipmentTariffsUseCase.js";
 import { UpdateExtraEquipmentTariffUseCase } from "../../../application/use-cases/UpdateExtraEquipmentTariffUseCase.js";
 import { DeleteExtraEquipmentTariffUseCase } from "../../../application/use-cases/DeleteExtraEquipmentTariffUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 
 const router = Router();
 

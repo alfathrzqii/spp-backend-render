@@ -8,7 +8,7 @@ import { CreateReRegistrationTariffUseCase } from "../../../application/use-case
 import { GetReRegistrationTariffsUseCase } from "../../../application/use-cases/GetReRegistrationTariffsUseCase.js";
 import { UpdateReRegistrationTariffUseCase } from "../../../application/use-cases/UpdateReRegistrationTariffUseCase.js";
 import { DeleteReRegistrationTariffUseCase } from "../../../application/use-cases/DeleteReRegistrationTariffUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 
 const router = Router();
 

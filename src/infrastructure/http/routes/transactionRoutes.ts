@@ -8,7 +8,7 @@ import { CreateTransactionUseCase } from "../../../application/use-cases/CreateT
 import { GetTransactionsUseCase } from "../../../application/use-cases/GetTransactionsUseCase.js";
 import { UpdateTransactionUseCase } from "../../../application/use-cases/UpdateTransactionUseCase.js";
 import { DeleteTransactionUseCase } from "../../../application/use-cases/DeleteTransactionUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import { createTransactionSchema } from "../schemas/transactionSchema.js";
 
 const router = Router();

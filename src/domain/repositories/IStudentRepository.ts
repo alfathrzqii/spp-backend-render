@@ -22,6 +22,7 @@ export interface IStudentRepository {
   >;
   findById(id: number): Promise<Student | null>;
   findByStudentNumber(studentNumber: string): Promise<Student | null>;
+  findByParentId(parentId: number): Promise<any[]>;
   update(
     id: number,
     data: {

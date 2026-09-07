@@ -8,7 +8,7 @@ import { CreateFulldayTariffUseCase } from "../../../application/use-cases/Creat
 import { GetFulldayTariffsUseCase } from "../../../application/use-cases/GetFulldayTariffsUseCase.js";
 import { UpdateFulldayTariffUseCase } from "../../../application/use-cases/UpdateFulldayTariffUseCase.js";
 import { DeleteFulldayTariffUseCase } from "../../../application/use-cases/DeleteFulldayTariffUseCase.js";
-import { validateRequest } from "../middleware/validateRequest.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 import prisma from "../../database/prisma.js";
 
 const router = Router();
