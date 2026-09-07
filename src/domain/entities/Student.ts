@@ -1,3 +1,15 @@
+export interface StudentExtracurricular {
+  id: number;
+  studentId: number;
+  sdExtracurricularId: number;
+  createdAt?: Date;
+  sdExtracurricular?: {
+    id: number;
+    name: string;
+    price: number;
+  };
+}
+
 export class Student {
   constructor(
     public readonly id: number,
@@ -13,6 +25,6 @@ export class Student {
     public readonly registrationStatus: string = "BARU",
     public readonly isFullday: boolean = false,
     public readonly status: string = "ACTIVE",
-    public readonly sdExtracurriculars?: any[]
+    public readonly sdExtracurriculars?: StudentExtracurricular[]
   ) {}
 }

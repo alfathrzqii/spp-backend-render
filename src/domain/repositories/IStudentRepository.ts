@@ -1,5 +1,24 @@
 import { Student } from "../entities/Student.js";
 
+export interface ParentChildStudentDTO {
+  id: number;
+  studentNumber: string;
+  name: string;
+  className: string;
+  schoolUnitId: number;
+  parentId: number;
+  enrollmentYear: number;
+  discountAmount: number;
+  discountEquipment: number;
+  discountExtracurricular: number;
+  registrationStatus: string;
+  isFullday: boolean;
+  status: string;
+  schoolUnit: {
+    name: string;
+  };
+}
+
 export interface IStudentRepository {
   create(
     studentData: Omit<Student, "id" | "parentId"> & { parentId?: number; sdExtracurricularIds?: number[] },
@@ -22,7 +41,7 @@ export interface IStudentRepository {
   >;
   findById(id: number): Promise<Student | null>;
   findByStudentNumber(studentNumber: string): Promise<Student | null>;
-  findByParentId(parentId: number): Promise<any[]>;
+  findByParentId(parentId: number): Promise<ParentChildStudentDTO[]>;
   update(
     id: number,
     data: {

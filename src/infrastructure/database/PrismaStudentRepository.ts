@@ -1,5 +1,5 @@
 import prisma from "./prisma.js";
-import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { IStudentRepository, ParentChildStudentDTO } from "../../domain/repositories/IStudentRepository.js";
 import { Student } from "../../domain/entities/Student.js";
 
 export class PrismaStudentRepository implements IStudentRepository {
@@ -177,13 +177,14 @@ export class PrismaStudentRepository implements IStudentRepository {
     return this.mapToDomain(student);
   }
 
-  async findByParentId(parentId: number): Promise<any[]> {
-    return await this.prisma.student.findMany({
+  async findByParentId(parentId: number): Promise<ParentChildStudentDTO[]> {
+    const list = await this.prisma.student.findMany({
       where: { parentId },
       include: {
         schoolUnit: { select: { name: true } },
       },
     });
+    return list as unknown as ParentChildStudentDTO[];
   }
 
   async update(
