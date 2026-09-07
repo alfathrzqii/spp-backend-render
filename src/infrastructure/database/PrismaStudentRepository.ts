@@ -249,15 +249,6 @@ export class PrismaStudentRepository implements IStudentRepository {
     if (parentEmail !== undefined) parentUpdateData.email = parentEmail;
     if (parentPhoneNumber !== undefined) parentUpdateData.phoneNumber = parentPhoneNumber;
 
-    if (status === "CANCELED") {
-      await this.prisma.invoice.deleteMany({
-        where: {
-          studentId: id,
-          status: "PENDING" as any,
-        },
-      });
-    }
-
     const updated = await this.prisma.student.update({
       where: { id },
       data: {

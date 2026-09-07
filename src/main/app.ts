@@ -18,6 +18,8 @@ import sdExtracurricularRoutes from "../infrastructure/http/routes/sdExtracurric
 import fulldayTariffRoutes from "../infrastructure/http/routes/fulldayTariffRoutes.js";
 import healthRoutes from "../infrastructure/http/routes/healthRoutes.js";
 
+import { errorHandler } from "../infrastructure/http/middlewares/errorHandler.js";
+
 const app = express();
 
 app.use(httpLogger);
@@ -44,18 +46,7 @@ app.use("/api/sd-extracurriculars", sdExtracurricularRoutes);
 app.use("/api/fullday-tariffs", fulldayTariffRoutes);
 
 // Global Error Handler
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  const status = err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-
-  if (status === 500) {
-    logger.error(err.message, err.stack);
-  }
-
-  res.status(status).json({
-    success: false,
-    message,
-  });
-});
+app.use(errorHandler);
 
 export default app;
+

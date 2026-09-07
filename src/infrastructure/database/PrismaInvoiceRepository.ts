@@ -451,5 +451,15 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       }
     });
   }
+
+  async deletePendingByStudentId(studentId: number): Promise<void> {
+    await this.prisma.invoice.deleteMany({
+      where: {
+        studentId,
+        status: "PENDING" as any,
+      },
+    });
+  }
 }
+
 

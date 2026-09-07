@@ -10,34 +10,38 @@ export class DomainError extends Error {
 }
 
 export class AppError extends DomainError {
-  public readonly statusCode: number;
-
-  constructor(message: string, statusCode: number) {
+  constructor(message: string) {
     super(message);
-    this.statusCode = statusCode;
   }
 }
 
 export class BadRequestError extends AppError {
   constructor(message: string = "Permintaan tidak valid") {
-    super(message, 400);
+    super(message);
   }
 }
 
 export class UnauthorizedError extends AppError {
   constructor(message: string = "Autentikasi gagal") {
-    super(message, 401);
+    super(message);
   }
 }
 
 export class ForbiddenError extends AppError {
   constructor(message: string = "Akses ditolak") {
-    super(message, 403);
+    super(message);
   }
 }
 
 export class NotFoundError extends AppError {
   constructor(message: string = "Sumber daya tidak ditemukan") {
-    super(message, 404);
+    super(message);
   }
 }
+
+export class ConflictError extends AppError {
+  constructor(message: string = "Terjadi konflik data") {
+    super(message);
+  }
+}
+

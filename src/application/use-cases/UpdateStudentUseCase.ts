@@ -1,9 +1,13 @@
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { Student } from "../../domain/entities/Student.js";
 import { NotFoundError, ForbiddenError } from "../../domain/errors/AppError.js";
 
 export class UpdateStudentUseCase {
-  constructor(private studentRepository: IStudentRepository) {}
+  constructor(
+    private studentRepository: IStudentRepository,
+    private invoiceRepository?: IInvoiceRepository
+  ) {}
 
   async execute(
     id: number,
@@ -36,6 +40,11 @@ export class UpdateStudentUseCase {
       throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola unit sekolah ini");
     }
 
+    if (data.status === "CANCELED" && this.invoiceRepository) {
+      await this.invoiceRepository.deletePendingByStudentId(id);
+    }
+
     return this.studentRepository.update(id, data);
   }
 }
+
