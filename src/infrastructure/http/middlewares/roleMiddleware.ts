@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import type { Role } from "@prisma/client";
+import type { Role } from "../../../domain/enums/Role.js";
 
 export const roleMiddleware = (allowedRoles: Role[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {

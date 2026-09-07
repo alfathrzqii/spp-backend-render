@@ -1,4 +1,5 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
 import { InvoiceStatus, PaymentMethod } from "../../domain/enums/index.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
@@ -13,6 +14,7 @@ export interface UpdateInvoiceStatusInput {
 export class UpdateInvoiceStatusUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
+    private studentRepository: IStudentRepository,
     private sppTariffRepository?: ISppTariffRepository
   ) {}
 
@@ -38,7 +40,7 @@ export class UpdateInvoiceStatusUseCase {
     else if (invoice.invoiceType === "SERAGAM") categoryName = "Uang Seragam";
     else if (invoice.invoiceType === "FULLDAY") categoryName = "Uang Fullday";
 
-    const student = (invoice as any).student;
+    const student = await this.studentRepository.findById(invoice.studentId);
     const schoolUnitId = student ? student.schoolUnitId : 1;
     const studentName = student ? student.name : "Siswa";
 

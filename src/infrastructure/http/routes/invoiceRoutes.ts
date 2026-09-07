@@ -47,7 +47,7 @@ const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
   fulldayTariffRepo
 );
 const getAllInvoicesUseCase = new GetAllInvoicesUseCase(invoiceRepo);
-const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, sppTariffRepo);
+const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, studentRepo, sppTariffRepo);
 const deleteInvoiceUseCase = new DeleteInvoiceUseCase(invoiceRepo);
 const getUnpaidInvoicesUseCase = new GetUnpaidInvoicesUseCase();
 const getClassRecapUseCase = new GetClassRecapUseCase();

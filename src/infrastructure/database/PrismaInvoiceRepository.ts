@@ -1,6 +1,7 @@
 import type { InvoiceStatus, InvoiceType, CategoryType, PaymentMethod } from "../../domain/enums/index.js";
-import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository, InvoiceWithDetailsDTO, BatchInvoiceItemDTO } from "../../domain/repositories/IInvoiceRepository.js";
 import { Invoice } from "../../domain/entities/Invoice.js";
+import { Transaction } from "../../domain/entities/Transaction.js";
 import prisma from "./prisma.js";
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
@@ -18,6 +19,21 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       inv.amount,
       inv.status as InvoiceStatus,
       inv.midtransOrderId
+    );
+  }
+
+  private mapTransactionToDomain(tx: any): Transaction {
+    return new Transaction(
+      tx.id,
+      tx.date,
+      tx.type as CategoryType,
+      tx.categoryId,
+      tx.paymentMethod as PaymentMethod,
+      tx.amount,
+      tx.schoolUnitId,
+      tx.invoiceId,
+      tx.description,
+      tx.recordedById
     );
   }
 
@@ -63,7 +79,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       recordedById: number;
     },
     existingInvoiceId?: number
-  ): Promise<{ invoice: Invoice; transaction: any }> {
+  ): Promise<{ invoice: Invoice; transaction: Transaction }> {
     return await this.prisma.$transaction(async (tx) => {
       let rawInvoice: any;
       if (existingInvoiceId) {
@@ -115,7 +131,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         },
       });
 
-      return { invoice: this.mapToDomain(rawInvoice), transaction };
+      return { invoice: this.mapToDomain(rawInvoice), transaction: this.mapTransactionToDomain(transaction) };
     });
   }
 
@@ -145,7 +161,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     invoiceType?: InvoiceType | undefined;
     skip?: number | undefined;
     take?: number | undefined;
-  }): Promise<{ invoices: any[]; total: number }> {
+  }): Promise<{ invoices: InvoiceWithDetailsDTO[]; total: number }> {
     const where: any = {};
 
     if (filter?.schoolUnitId) {
@@ -207,7 +223,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       this.prisma.invoice.count({ where }),
     ]);
 
-    return { invoices, total };
+    return { invoices: invoices as unknown as InvoiceWithDetailsDTO[], total };
   }
 
   async getPaidAmount(invoiceId: number): Promise<number> {
@@ -295,8 +311,8 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     });
   }
 
-  async findByOrderIdPrefix(orderIdPrefix: string): Promise<any[]> {
-    return await this.prisma.invoice.findMany({
+  async findByOrderIdPrefix(orderIdPrefix: string): Promise<BatchInvoiceItemDTO[]> {
+    const invoices = await this.prisma.invoice.findMany({
       where: {
         midtransOrderId: {
           startsWith: orderIdPrefix,
@@ -308,12 +324,13 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         },
       },
     });
+    return invoices as unknown as BatchInvoiceItemDTO[];
   }
 
   async findPendingBatchInvoices(filter?: {
     studentNumber?: string | undefined;
     schoolUnitId?: number | undefined;
-  }): Promise<any[]> {
+  }): Promise<BatchInvoiceItemDTO[]> {
     const where: any = {
       status: "PENDING" as any,
       midtransOrderId: {
@@ -328,7 +345,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       where.student = { schoolUnitId: filter.schoolUnitId };
     }
 
-    return await this.prisma.invoice.findMany({
+    const invoices = await this.prisma.invoice.findMany({
       where,
       include: {
         student: {
@@ -336,6 +353,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         },
       },
     });
+    return invoices as unknown as BatchInvoiceItemDTO[];
   }
 
   async upsertPendingBatchInvoices(
@@ -386,7 +404,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
   }
 
   async processPaidInvoicesOnline(
-    invoices: any[],
+    invoices: BatchInvoiceItemDTO[] | any[],
     source: string,
     paymentMethod: PaymentMethod = "MIDTRANS" as any
   ): Promise<void> {
