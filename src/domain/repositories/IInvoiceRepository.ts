@@ -57,4 +57,27 @@ export interface IInvoiceRepository {
     }
   ): Promise<Invoice>;
   delete(id: number): Promise<void>;
+  findByOrderIdPrefix(orderIdPrefix: string): Promise<any[]>;
+  findPendingBatchInvoices(filter?: {
+    studentNumber?: string | undefined;
+    schoolUnitId?: number | undefined;
+  }): Promise<any[]>;
+  upsertPendingBatchInvoices(
+    studentId: number,
+    baseOrderId: string,
+    items: Array<{
+      month: number;
+      year: number;
+      invoiceType: InvoiceType;
+      baseAmount: number;
+      discountApplied: number;
+      amountToPay: number;
+      existingInvoiceId?: number | undefined;
+    }>
+  ): Promise<void>;
+  processPaidInvoicesOnline(
+    invoices: any[],
+    source: string,
+    paymentMethod?: PaymentMethod
+  ): Promise<void>;
 }
