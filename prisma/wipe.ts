@@ -3,7 +3,23 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("=== Wiping All Test Dummy Data from Cloud Database ===");
+  // 1. Guard lingkungan produksi
+  if (process.env["NODE_ENV"] === "production") {
+    console.error("⛔ EKSEKUSI DIBATALKAN: Skrip db:wipe dilarang keras dijalankan pada lingkungan produksi!");
+    process.exit(1);
+  }
+
+  // 2. Guard konfirmasi eksplisit --force
+  const hasForceFlag = process.argv.includes("--force");
+  if (!hasForceFlag) {
+    console.error("⚠️ PERINGATAN KESELAMATAN:");
+    console.error("Skrip ini akan MENGHAPUS SEMUA transaksi, tagihan, siswa, dan akun wali murid.");
+    console.error("Untuk mengonfirmasi eksekusi di lingkungan lokal, sertakan flag '--force':");
+    console.error("  npm run db:wipe -- --force\n");
+    process.exit(1);
+  }
+
+  console.log("=== Wiping All Test Dummy Data from Local Database ===");
 
   // 1. Delete transactions
   const delTx = await prisma.transaction.deleteMany({});
