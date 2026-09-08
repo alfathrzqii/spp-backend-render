@@ -77,6 +77,29 @@ export class PrismaSppTariffRepository implements ISppTariffRepository {
     );
   }
 
+  async findBySchoolUnitIds(schoolUnitIds: number[]): Promise<SppTariff[]> {
+    const tariffs = await this.prisma.sppTariff.findMany({
+      where: {
+        schoolUnitId: { in: schoolUnitIds },
+      },
+    });
+
+    return tariffs.map(
+      (t) =>
+        new SppTariff(
+          t.id,
+          t.schoolUnitId,
+          t.enrollmentYear,
+          t.amount,
+          t.developmentFee,
+          t.reRegistrationFee,
+          t.equipmentFee,
+          t.extracurricularFee,
+          t.uniformFee
+        )
+    );
+  }
+
   async findByUnitAndYear(
     schoolUnitId: number,
     enrollmentYear: number

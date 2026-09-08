@@ -142,4 +142,59 @@ export interface IInvoiceRepository {
     paymentMethod?: PaymentMethod
   ): Promise<void>;
   deletePendingByStudentId(studentId: number): Promise<void>;
+  findInvoicesForRecap(
+    studentIds: number[],
+    year: number,
+    upToMonth: number
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      month: number;
+      amount: number;
+      status: InvoiceStatus;
+      transactions: Array<{ amount: number }>;
+    }>
+  >;
+  findByStudentAndYearWithTransactions(
+    studentId: number,
+    year?: number,
+    invoiceTypes?: InvoiceType[]
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      invoiceType: InvoiceType;
+      month: number;
+      year: number;
+      baseAmount: number;
+      discountApplied: number;
+      amount: number;
+      status: InvoiceStatus;
+      midtransOrderId: string | null;
+      transactions: Array<{
+        id: number;
+        amount: number;
+        type: string;
+      }>;
+    }>
+  >;
+  findPendingBatchByStudentId(studentId: number): Promise<BatchInvoiceItemDTO[]>;
+  findInvoicesForUnpaidCalculation(
+    studentIds: number[],
+    invoiceType: InvoiceType,
+    year?: number,
+    upToMonth?: number
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      invoiceType: InvoiceType;
+      month: number;
+      year: number;
+      amount: number;
+      status: InvoiceStatus;
+      transactions: Array<{ amount: number }>;
+    }>
+  >;
 }

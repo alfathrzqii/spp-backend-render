@@ -19,6 +19,20 @@ export interface ParentChildStudentDTO {
   };
 }
 
+export interface StudentWithFullDetailsDTO extends Student {
+  schoolUnit: {
+    id: number;
+    name: string;
+  };
+  parent: {
+    id: number;
+    name: string;
+    email: string;
+    phoneNumber: string | null;
+  } | null;
+  sdExtracurriculars?: any[];
+}
+
 export interface IStudentRepository {
   create(
     studentData: Omit<Student, "id" | "parentId"> & { parentId?: number; sdExtracurricularIds?: number[] },
@@ -41,6 +55,14 @@ export interface IStudentRepository {
   >;
   findById(id: number): Promise<Student | null>;
   findByStudentNumber(studentNumber: string): Promise<Student | null>;
+  findByStudentNumberWithDetails(studentNumber: string): Promise<StudentWithFullDetailsDTO | null>;
+  findStudentsWithDetails(filter?: {
+    schoolUnitId?: number | undefined;
+    className?: string | undefined;
+    notClassName?: string | undefined;
+    parentId?: number | undefined;
+    status?: string | undefined;
+  }): Promise<StudentWithFullDetailsDTO[]>;
   findByParentId(parentId: number): Promise<ParentChildStudentDTO[]>;
   update(
     id: number,

@@ -8,6 +8,8 @@ import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffReposit
 import { PrismaExtraEquipmentTariffRepository } from "../../database/PrismaExtraEquipmentTariffRepository.js";
 import { PrismaFulldayTariffRepository } from "../../database/PrismaFulldayTariffRepository.js";
 import { PrismaReRegistrationTariffRepository } from "../../database/PrismaReRegistrationTariffRepository.js";
+import { PrismaUserRepository } from "../../database/PrismaUserRepository.js";
+import { PrismaSchoolUnitRepository } from "../../database/PrismaSchoolUnitRepository.js";
 import { PakasirService } from "../../services/PakasirService.js";
 import { PakasirController } from "../controllers/PakasirController.js";
 import { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
@@ -37,6 +39,8 @@ const sppTariffRepo = new PrismaSppTariffRepository();
 const extraEquipmentTariffRepo = new PrismaExtraEquipmentTariffRepository();
 const fulldayTariffRepo = new PrismaFulldayTariffRepository(prisma);
 const reRegistrationTariffRepo = new PrismaReRegistrationTariffRepository();
+const userRepo = new PrismaUserRepository();
+const schoolUnitRepo = new PrismaSchoolUnitRepository();
 const pakasirService = new PakasirService();
 
 // Core Invoice Use Cases
@@ -50,9 +54,31 @@ const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
 const getAllInvoicesUseCase = new GetAllInvoicesUseCase(invoiceRepo);
 const updateInvoiceStatusUseCase = new UpdateInvoiceStatusUseCase(invoiceRepo, studentRepo, sppTariffRepo);
 const deleteInvoiceUseCase = new DeleteInvoiceUseCase(invoiceRepo);
-const getUnpaidInvoicesUseCase = new GetUnpaidInvoicesUseCase();
-const getClassRecapUseCase = new GetClassRecapUseCase();
-const getStudentInvoicesUseCase = new GetStudentInvoicesUseCase(invoiceRepo);
+const getUnpaidInvoicesUseCase = new GetUnpaidInvoicesUseCase(
+  studentRepo,
+  invoiceRepo,
+  sppTariffRepo,
+  extraEquipmentTariffRepo,
+  fulldayTariffRepo,
+  userRepo
+);
+const getClassRecapUseCase = new GetClassRecapUseCase(
+  studentRepo,
+  schoolUnitRepo,
+  sppTariffRepo,
+  invoiceRepo,
+  userRepo
+);
+const getStudentInvoicesUseCase = new GetStudentInvoicesUseCase(
+  invoiceRepo,
+  studentRepo,
+  sppTariffRepo,
+  extraEquipmentTariffRepo,
+  fulldayTariffRepo,
+  userRepo,
+  pakasirService,
+  logger
+);
 
 // Pakasir & Online Payment Use Cases
 const createPakasirTransactionUseCase = new CreatePakasirTransactionUseCase(

@@ -1,5 +1,9 @@
 import prisma from "./prisma.js";
-import type { IStudentRepository, ParentChildStudentDTO } from "../../domain/repositories/IStudentRepository.js";
+import type {
+  IStudentRepository,
+  ParentChildStudentDTO,
+  StudentWithFullDetailsDTO,
+} from "../../domain/repositories/IStudentRepository.js";
 import { Student } from "../../domain/entities/Student.js";
 
 export class PrismaStudentRepository implements IStudentRepository {
@@ -175,6 +179,73 @@ export class PrismaStudentRepository implements IStudentRepository {
     if (!student) return null;
 
     return this.mapToDomain(student);
+  }
+
+  async findByStudentNumberWithDetails(studentNumber: string): Promise<StudentWithFullDetailsDTO | null> {
+    const student = await this.prisma.student.findUnique({
+      where: { studentNumber },
+      include: {
+        schoolUnit: { select: { id: true, name: true } },
+        parent: { select: { id: true, name: true, email: true, phoneNumber: true } },
+        sdExtracurriculars: true,
+      },
+    });
+
+    if (!student) return null;
+
+    const domain = this.mapToDomain(student);
+    return Object.assign(domain, {
+      schoolUnit: student.schoolUnit,
+      parent: student.parent,
+      sdExtracurriculars: student.sdExtracurriculars,
+    }) as StudentWithFullDetailsDTO;
+  }
+
+  async findStudentsWithDetails(filter?: {
+    schoolUnitId?: number | undefined;
+    className?: string | undefined;
+    notClassName?: string | undefined;
+    parentId?: number | undefined;
+    status?: string | undefined;
+  }): Promise<StudentWithFullDetailsDTO[]> {
+    const where: any = {};
+
+    if (filter?.schoolUnitId) {
+      where.schoolUnitId = filter.schoolUnitId;
+    }
+
+    if (filter?.className) {
+      where.className = filter.className;
+    } else if (filter?.notClassName) {
+      where.className = { not: filter.notClassName };
+    }
+
+    if (filter?.parentId) {
+      where.parentId = filter.parentId;
+    }
+
+    if (filter?.status) {
+      where.status = filter.status;
+    }
+
+    const students = await this.prisma.student.findMany({
+      where,
+      include: {
+        schoolUnit: { select: { id: true, name: true } },
+        parent: { select: { id: true, name: true, email: true, phoneNumber: true } },
+        sdExtracurriculars: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return students.map((s) => {
+      const domain = this.mapToDomain(s);
+      return Object.assign(domain, {
+        schoolUnit: s.schoolUnit,
+        parent: s.parent,
+        sdExtracurriculars: s.sdExtracurriculars,
+      }) as StudentWithFullDetailsDTO;
+    });
   }
 
   async findByParentId(parentId: number): Promise<ParentChildStudentDTO[]> {

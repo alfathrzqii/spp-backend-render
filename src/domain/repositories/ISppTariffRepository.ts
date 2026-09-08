@@ -4,6 +4,7 @@ export interface ISppTariffRepository {
   create(data: Omit<SppTariff, "id">): Promise<SppTariff>;
   findAll(filter?: { schoolUnitId?: number }): Promise<SppTariff[]>;
   findById(id: number): Promise<SppTariff | null>;
+  findBySchoolUnitIds(schoolUnitIds: number[]): Promise<SppTariff[]>;
   findByUnitAndYear(
     schoolUnitId: number,
     enrollmentYear: number
