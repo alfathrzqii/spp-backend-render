@@ -1,4 +1,11 @@
-import prisma from "../../infrastructure/database/prisma.js";
+import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
+import type { IExtraEquipmentTariffRepository } from "../../domain/repositories/IExtraEquipmentTariffRepository.js";
+import type { IFulldayTariffRepository } from "../../domain/repositories/IFulldayTariffRepository.js";
+import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
+import type { InvoiceType } from "../../domain/enums/index.js";
+import type { SppTariff } from "../../domain/entities/SppTariff.js";
 
 export interface GetUnpaidInvoicesDTO {
   user: {
@@ -14,90 +21,100 @@ export interface GetUnpaidInvoicesDTO {
 }
 
 export class GetUnpaidInvoicesUseCase {
+  constructor(
+    private studentRepository: IStudentRepository,
+    private invoiceRepository: IInvoiceRepository,
+    private sppTariffRepository: ISppTariffRepository,
+    private extraEquipmentTariffRepository: IExtraEquipmentTariffRepository,
+    private fulldayTariffRepository: IFulldayTariffRepository,
+    private userRepository: IUserRepository
+  ) {}
+
   async execute(dto: GetUnpaidInvoicesDTO) {
     const { user } = dto;
     const year = dto.year ?? new Date().getFullYear();
     const upToMonth = dto.upToMonth ?? new Date().getMonth() + 1;
 
-    const where: any = {};
+    let filterSchoolUnitId: number | undefined;
+    let filterClassName: string | undefined;
+    let filterParentId: number | undefined;
+    let notClassName: string | undefined;
 
-    let userClassName: string | null = null;
     if ((user.role as any) === "WALI_KELAS") {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { className: true } as any,
-      });
-      userClassName = (dbUser as any)?.className || null;
-    }
-
-    if ((user.role as any) === "UNIT_ADMIN") {
-      where.schoolUnitId = user.schoolUnitId;
+      const dbUser = await this.userRepository.findById(user.id);
+      filterSchoolUnitId = user.schoolUnitId ?? undefined;
+      filterClassName = dbUser?.className || undefined;
+    } else if ((user.role as any) === "UNIT_ADMIN") {
+      filterSchoolUnitId = user.schoolUnitId ?? undefined;
       if (dto.className) {
-        where.className = dto.className.trim();
+        filterClassName = dto.className.trim();
       }
-    } else if ((user.role as any) === "WALI_KELAS") {
-      where.schoolUnitId = user.schoolUnitId;
-      where.className = userClassName;
     } else if ((user.role as any) === "PARENT") {
-      where.parentId = user.id;
+      filterParentId = user.id;
     } else {
       if (dto.schoolUnitId && !isNaN(Number(dto.schoolUnitId))) {
-        where.schoolUnitId = Number(dto.schoolUnitId);
+        filterSchoolUnitId = Number(dto.schoolUnitId);
       }
       if (dto.className) {
-        where.className = dto.className.trim();
+        filterClassName = dto.className.trim();
       }
     }
 
-    where.status = "ACTIVE";
     if (!dto.className) {
-      where.className = { not: "PPDB" };
+      notClassName = "PPDB";
     }
 
-    const invoiceType = ((dto.invoiceType as string) || "SPP").toUpperCase();
-
-    const students = await prisma.student.findMany({
-      where,
-      include: {
-        schoolUnit: { select: { name: true } },
-        parent: { select: { name: true, phoneNumber: true, email: true } },
-        sdExtracurriculars: true,
-      },
-      orderBy: { name: "asc" },
+    const students = await this.studentRepository.findStudentsWithDetails({
+      schoolUnitId: filterSchoolUnitId,
+      className: filterClassName,
+      parentId: filterParentId,
+      notClassName,
+      status: "ACTIVE",
     });
+
+    if (students.length === 0) {
+      return {
+        invoiceType: ((dto.invoiceType as string) || "SPP").toUpperCase(),
+        unpaidList: [],
+        summary: {
+          grandTotalUnpaidAmount: 0,
+          grandTotalUnpaidMonthsCount: 0,
+          totalStudentsCount: 0,
+          totalStudentsUnpaidCount: 0,
+        },
+      };
+    }
+
+    const invoiceType = ((dto.invoiceType as string) || "SPP").toUpperCase() as InvoiceType;
+    const studentIds = students.map((s) => s.id);
+    const schoolUnitIds = Array.from(new Set(students.map((s) => s.schoolUnitId)));
+
+    // Batch load SPP Tariffs
+    const sppTariffs = await this.sppTariffRepository.findBySchoolUnitIds(schoolUnitIds);
+    const tariffMap = new Map<string, SppTariff>();
+    sppTariffs.forEach((t) => tariffMap.set(`${t.schoolUnitId}-${t.enrollmentYear}`, t));
 
     const unpaidList = [];
 
-    for (const student of students) {
-      const tariff = await prisma.sppTariff.findUnique({
-        where: {
-          uq_school_unit_enrollment_year: {
-            schoolUnitId: student.schoolUnitId,
-            enrollmentYear: student.enrollmentYear,
-          },
-        },
-      });
+    if (invoiceType === "SPP") {
+      // 1. SPP Bulanan - Batch query invoices
+      const dbInvoices = await this.invoiceRepository.findInvoicesForUnpaidCalculation(
+        studentIds,
+        "SPP" as any,
+        year,
+        upToMonth
+      );
+      const studentInvoiceMap = new Map<string, typeof dbInvoices[0]>();
+      dbInvoices.forEach((inv) => studentInvoiceMap.set(`${inv.studentId}-${inv.month}`, inv));
 
-      if (!tariff) continue;
+      for (const student of students) {
+        const tariff = tariffMap.get(`${student.schoolUnitId}-${student.enrollmentYear}`);
+        if (!tariff) continue;
+        if (year < student.enrollmentYear) continue;
 
-      // 1. SPP Bulanan
-      if (invoiceType === "SPP") {
         const baseAmount = tariff.amount;
         const discountApplied = Math.min(baseAmount, student.discountAmount);
         const netAmount = baseAmount - discountApplied;
-
-        if (year < student.enrollmentYear) {
-          continue;
-        }
-
-        const dbInvoices = await prisma.invoice.findMany({
-          where: {
-            studentId: student.id,
-            invoiceType: "SPP" as any,
-            year,
-            month: { lte: upToMonth },
-          },
-        });
 
         let totalUnpaidMonths = 0;
         let totalUnpaidAmount = 0;
@@ -109,8 +126,9 @@ export class GetUnpaidInvoicesUseCase {
         } else if (year === 2026) {
           startMonth = 7;
         }
+
         for (let m = startMonth; m <= upToMonth; m++) {
-          const inv = dbInvoices.find((i) => i.month === m);
+          const inv = studentInvoiceMap.get(`${student.id}-${m}`);
           if (!inv) {
             if (netAmount > 0) {
               totalUnpaidMonths++;
@@ -134,11 +152,7 @@ export class GetUnpaidInvoicesUseCase {
               });
             }
           } else if ((inv.status as any) === "PARTIALLY_PAID") {
-            const txSum = await prisma.transaction.aggregate({
-              where: { invoiceId: inv.id, type: "INCOME" as any },
-              _sum: { amount: true },
-            });
-            const paid = txSum._sum.amount || 0;
+            const paid = inv.transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
             const unpaidPart = Math.max(0, inv.amount - paid);
             if (unpaidPart > 0) {
               totalUnpaidMonths++;
@@ -174,36 +188,32 @@ export class GetUnpaidInvoicesUseCase {
             totalUnpaidCount: totalUnpaidMonths,
           });
         }
-      } else if (invoiceType === "FULLDAY") {
-        // 2. FULLDAY Bulanan
+      }
+    } else if (invoiceType === "FULLDAY") {
+      // 2. FULLDAY Bulanan - Batch query tariffs & invoices
+      const fulldayTariffs = await this.fulldayTariffRepository.findAll();
+      const fulldayMap = new Map<string, number>();
+      fulldayTariffs.forEach((ft) => fulldayMap.set(`${ft.schoolUnitId}-${ft.enrollmentYear}`, ft.monthlyFee));
+
+      const dbInvoices = await this.invoiceRepository.findInvoicesForUnpaidCalculation(
+        studentIds,
+        "FULLDAY" as any,
+        year,
+        upToMonth
+      );
+      const studentInvoiceMap = new Map<string, typeof dbInvoices[0]>();
+      dbInvoices.forEach((inv) => studentInvoiceMap.set(`${inv.studentId}-${inv.month}`, inv));
+
+      for (const student of students) {
         if (!student.isFullday) continue;
         if (year < student.enrollmentYear) continue;
 
         let fulldayFee = 0;
         if (student.schoolUnitId === 1 || student.schoolUnitId === 2) {
-          const ft = await (prisma as any).fulldayTariff.findUnique({
-            where: {
-              uq_fullday_school_unit_enrollment_year: {
-                schoolUnitId: student.schoolUnitId,
-                enrollmentYear: student.enrollmentYear,
-              },
-            },
-          });
-          if (ft) {
-            fulldayFee = ft.monthlyFee;
-          }
+          fulldayFee = fulldayMap.get(`${student.schoolUnitId}-${student.enrollmentYear}`) || 0;
         }
 
         if (fulldayFee <= 0) continue;
-
-        const dbInvoices = await prisma.invoice.findMany({
-          where: {
-            studentId: student.id,
-            invoiceType: "FULLDAY" as any,
-            year,
-            month: { lte: upToMonth },
-          },
-        });
 
         let totalUnpaidMonths = 0;
         let totalUnpaidAmount = 0;
@@ -217,7 +227,7 @@ export class GetUnpaidInvoicesUseCase {
         }
 
         for (let m = startMonth; m <= upToMonth; m++) {
-          const inv = dbInvoices.find((i) => i.month === m);
+          const inv = studentInvoiceMap.get(`${student.id}-${m}`);
           if (!inv) {
             totalUnpaidMonths++;
             totalUnpaidAmount += fulldayFee;
@@ -237,11 +247,7 @@ export class GetUnpaidInvoicesUseCase {
               unpaidAmount: fulldayFee,
             });
           } else if ((inv.status as any) === "PARTIALLY_PAID") {
-            const txSum = await prisma.transaction.aggregate({
-              where: { invoiceId: inv.id, type: "INCOME" as any },
-              _sum: { amount: true },
-            });
-            const paid = txSum._sum.amount || 0;
+            const paid = inv.transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
             const unpaidPart = Math.max(0, inv.amount - paid);
             if (unpaidPart > 0) {
               totalUnpaidMonths++;
@@ -277,8 +283,30 @@ export class GetUnpaidInvoicesUseCase {
             totalUnpaidCount: totalUnpaidMonths,
           });
         }
-      } else {
-        // 3. Non-Monthly (UANG_PENGEMBANGAN, EKSTRAKURIKULER, DAFTAR_ULANG, UANG_PERALATAN, SERAGAM)
+      }
+    } else {
+      // 3. Non-Monthly (UANG_PENGEMBANGAN, EKSTRAKURIKULER, DAFTAR_ULANG, UANG_PERALATAN, SERAGAM)
+      const extraTariffs =
+        invoiceType === "UANG_PERALATAN" || invoiceType === "EKSTRAKURIKULER"
+          ? await this.extraEquipmentTariffRepository.findAll()
+          : [];
+      const extraMap = new Map<string, typeof extraTariffs[0]>();
+      extraTariffs.forEach((et) =>
+        extraMap.set(`${et.schoolUnitId}-${et.enrollmentYear}-${et.level}`, et)
+      );
+
+      // Batch query non-monthly invoices for all student IDs
+      const dbInvoices = await this.invoiceRepository.findInvoicesForUnpaidCalculation(
+        studentIds,
+        invoiceType
+      );
+      const studentInvoiceMap = new Map<string, typeof dbInvoices[0]>();
+      dbInvoices.forEach((inv) => studentInvoiceMap.set(`${inv.studentId}-${inv.year}`, inv));
+
+      for (const student of students) {
+        const tariff = tariffMap.get(`${student.schoolUnitId}-${student.enrollmentYear}`);
+        if (!tariff) continue;
+
         let baseAmount = 0;
         let discountApplied = 0;
 
@@ -304,15 +332,9 @@ export class GetUnpaidInvoicesUseCase {
                 : student.className.trim().toUpperCase().charAt(0) === "B"
                 ? "B"
                 : "A";
-            const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-              where: {
-                uq_school_unit_enrollment_year_level: {
-                  schoolUnitId: student.schoolUnitId,
-                  enrollmentYear: student.enrollmentYear,
-                  level,
-                },
-              },
-            });
+            const extraTariff = extraMap.get(
+              `${student.schoolUnitId}-${student.enrollmentYear}-${level}`
+            );
             if (extraTariff) {
               if (student.registrationStatus === "BARU") {
                 equipFee = extraTariff.equipmentFeeNew || extraTariff.equipmentFee;
@@ -337,15 +359,9 @@ export class GetUnpaidInvoicesUseCase {
                 : student.className.trim().toUpperCase().charAt(0) === "B"
                 ? "B"
                 : "A";
-            const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-              where: {
-                uq_school_unit_enrollment_year_level: {
-                  schoolUnitId: student.schoolUnitId,
-                  enrollmentYear: student.enrollmentYear,
-                  level,
-                },
-              },
-            });
+            const extraTariff = extraMap.get(
+              `${student.schoolUnitId}-${student.enrollmentYear}-${level}`
+            );
             if (extraTariff) {
               if (student.registrationStatus === "BARU") {
                 extraFee = extraTariff.extracurricularFeeNew || extraTariff.extracurricularFee;
@@ -359,7 +375,10 @@ export class GetUnpaidInvoicesUseCase {
             }
           } else if (student.schoolUnitId === 3) {
             if (student.sdExtracurriculars && student.sdExtracurriculars.length > 0) {
-              extraFee = student.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
+              extraFee = student.sdExtracurriculars.reduce(
+                (sum: number, e: any) => sum + (e.fee || 0),
+                0
+              );
             }
           }
           baseAmount = extraFee;
@@ -374,18 +393,7 @@ export class GetUnpaidInvoicesUseCase {
             ? student.enrollmentYear
             : year;
 
-        const dbInvoice = await prisma.invoice.findFirst({
-          where: {
-            studentId: student.id,
-            invoiceType: invoiceType as any,
-            year: targetYear,
-          },
-          include: {
-            transactions: {
-              where: { type: "INCOME" as any },
-            },
-          },
-        });
+        const dbInvoice = studentInvoiceMap.get(`${student.id}-${targetYear}`);
 
         let paidAmount = 0;
         if (dbInvoice) {

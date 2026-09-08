@@ -478,6 +478,154 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       },
     });
   }
+
+  async findInvoicesForRecap(
+    studentIds: number[],
+    year: number,
+    upToMonth: number
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      month: number;
+      amount: number;
+      status: InvoiceStatus;
+      transactions: Array<{ amount: number }>;
+    }>
+  > {
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        studentId: { in: studentIds },
+        invoiceType: "SPP" as any,
+        year,
+        month: { lte: upToMonth },
+      },
+      select: {
+        id: true,
+        studentId: true,
+        month: true,
+        amount: true,
+        status: true,
+        transactions: {
+          where: { type: "INCOME" as any },
+          select: { amount: true },
+        },
+      },
+    });
+
+    return invoices as any;
+  }
+
+  async findByStudentAndYearWithTransactions(
+    studentId: number,
+    year?: number,
+    invoiceTypes?: InvoiceType[]
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      invoiceType: InvoiceType;
+      month: number;
+      year: number;
+      baseAmount: number;
+      discountApplied: number;
+      amount: number;
+      status: InvoiceStatus;
+      midtransOrderId: string | null;
+      transactions: Array<{
+        id: number;
+        amount: number;
+        type: string;
+      }>;
+    }>
+  > {
+    const where: any = { studentId };
+    if (year !== undefined) {
+      where.year = year;
+    }
+    if (invoiceTypes && invoiceTypes.length > 0) {
+      where.invoiceType = { in: invoiceTypes as any };
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      include: {
+        transactions: {
+          where: { type: "INCOME" as any },
+          select: { id: true, amount: true, type: true },
+        },
+      },
+      orderBy: { month: "asc" },
+    });
+
+    return invoices as any;
+  }
+
+  async findPendingBatchByStudentId(studentId: number): Promise<BatchInvoiceItemDTO[]> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        studentId,
+        status: "PENDING" as any,
+        midtransOrderId: {
+          not: null,
+          startsWith: "BATCH-",
+        },
+      },
+      include: {
+        student: { select: { id: true, name: true, schoolUnitId: true, studentNumber: true } },
+      },
+    });
+
+    return invoices as any;
+  }
+
+  async findInvoicesForUnpaidCalculation(
+    studentIds: number[],
+    invoiceType: InvoiceType,
+    year?: number,
+    upToMonth?: number
+  ): Promise<
+    Array<{
+      id: number;
+      studentId: number;
+      invoiceType: InvoiceType;
+      month: number;
+      year: number;
+      amount: number;
+      status: InvoiceStatus;
+      transactions: Array<{ amount: number }>;
+    }>
+  > {
+    const where: any = {
+      studentId: { in: studentIds },
+      invoiceType: invoiceType as any,
+    };
+    if (year !== undefined) {
+      where.year = year;
+    }
+    if (upToMonth !== undefined) {
+      where.month = { lte: upToMonth };
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      select: {
+        id: true,
+        studentId: true,
+        invoiceType: true,
+        month: true,
+        year: true,
+        amount: true,
+        status: true,
+        transactions: {
+          where: { type: "INCOME" as any },
+          select: { amount: true },
+        },
+      },
+    });
+
+    return invoices as any;
+  }
 }
 
 

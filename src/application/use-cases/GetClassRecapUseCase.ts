@@ -1,4 +1,8 @@
-import prisma from "../../infrastructure/database/prisma.js";
+import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { ISchoolUnitRepository } from "../../domain/repositories/ISchoolUnitRepository.js";
+import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
 
 export interface GetClassRecapDTO {
   user: {
@@ -13,43 +17,43 @@ export interface GetClassRecapDTO {
 }
 
 export class GetClassRecapUseCase {
+  constructor(
+    private studentRepository: IStudentRepository,
+    private schoolUnitRepository: ISchoolUnitRepository,
+    private sppTariffRepository: ISppTariffRepository,
+    private invoiceRepository: IInvoiceRepository,
+    private userRepository: IUserRepository
+  ) {}
+
   async execute(dto: GetClassRecapDTO) {
     const { user } = dto;
     const year = dto.year ?? new Date().getFullYear();
     const upToMonth = dto.upToMonth ?? new Date().getMonth() + 1;
 
-    const where: any = {};
+    let targetSchoolUnitId: number | undefined;
+    let targetClassName: string | undefined;
 
-    let userClassName: string | null = null;
     if ((user.role as any) === "WALI_KELAS") {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { className: true } as any,
-      });
-      userClassName = (dbUser as any)?.className || null;
-    }
-
-    if ((user.role as any) === "UNIT_ADMIN") {
-      where.schoolUnitId = user.schoolUnitId;
+      const dbUser = await this.userRepository.findById(user.id);
+      targetSchoolUnitId = user.schoolUnitId ?? undefined;
+      targetClassName = dbUser?.className || undefined;
+    } else if ((user.role as any) === "UNIT_ADMIN") {
+      targetSchoolUnitId = user.schoolUnitId ?? undefined;
       if (dto.className) {
-        where.className = String(dto.className);
-      }
-    } else if ((user.role as any) === "WALI_KELAS") {
-      where.schoolUnitId = user.schoolUnitId;
-      if (userClassName) {
-        where.className = userClassName;
+        targetClassName = String(dto.className);
       }
     } else {
       if (dto.schoolUnitId && !isNaN(Number(dto.schoolUnitId))) {
-        where.schoolUnitId = Number(dto.schoolUnitId);
+        targetSchoolUnitId = Number(dto.schoolUnitId);
       }
       if (dto.className) {
-        where.className = String(dto.className);
+        targetClassName = String(dto.className);
       }
     }
 
-    const students = await prisma.student.findMany({
-      where,
+    const students = await this.studentRepository.findStudentsWithDetails({
+      schoolUnitId: targetSchoolUnitId,
+      className: targetClassName,
     });
 
     if (students.length === 0) {
@@ -61,27 +65,9 @@ export class GetClassRecapUseCase {
 
     // Batch query related data in parallel: SchoolUnits, SppTariffs, and Invoices
     const [schoolUnits, tariffs, dbInvoices] = await Promise.all([
-      prisma.schoolUnit.findMany({
-        where: { id: { in: schoolUnitIds } },
-        select: { id: true, name: true },
-      }),
-      prisma.sppTariff.findMany({
-        where: { schoolUnitId: { in: schoolUnitIds } },
-      }),
-      prisma.invoice.findMany({
-        where: {
-          studentId: { in: studentIds },
-          invoiceType: "SPP" as any,
-          year,
-          month: { lte: upToMonth },
-        },
-        include: {
-          transactions: {
-            where: { type: "INCOME" as any },
-            select: { amount: true },
-          },
-        },
-      }),
+      this.schoolUnitRepository.findAll(),
+      this.sppTariffRepository.findBySchoolUnitIds(schoolUnitIds),
+      this.invoiceRepository.findInvoicesForRecap(studentIds, year, upToMonth),
     ]);
 
     // Create lookup maps for instant in-memory lookups

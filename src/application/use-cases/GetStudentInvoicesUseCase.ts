@@ -1,7 +1,12 @@
-import prisma from "../../infrastructure/database/prisma.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../domain/errors/AppError.js";
 import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
-import { logger } from "../../infrastructure/services/WinstonLogger.js";
+import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
+import type { IExtraEquipmentTariffRepository } from "../../domain/repositories/IExtraEquipmentTariffRepository.js";
+import type { IFulldayTariffRepository } from "../../domain/repositories/IFulldayTariffRepository.js";
+import type { IUserRepository } from "../../domain/repositories/IUserRepository.js";
+import type { IPakasirService } from "../ports/IPakasirService.js";
+import type { ILogger } from "../../domain/services/ILogger.js";
 
 export interface GetStudentInvoicesDTO {
   user?: {
@@ -14,7 +19,16 @@ export interface GetStudentInvoicesDTO {
 }
 
 export class GetStudentInvoicesUseCase {
-  constructor(private invoiceRepository?: IInvoiceRepository) {}
+  constructor(
+    private invoiceRepository: IInvoiceRepository,
+    private studentRepository: IStudentRepository,
+    private sppTariffRepository: ISppTariffRepository,
+    private extraEquipmentTariffRepository: IExtraEquipmentTariffRepository,
+    private fulldayTariffRepository: IFulldayTariffRepository,
+    private userRepository: IUserRepository,
+    private pakasirService: IPakasirService,
+    private logger: ILogger
+  ) {}
 
   async execute(dto: GetStudentInvoicesDTO) {
     const { user, studentNumber } = dto;
@@ -24,14 +38,7 @@ export class GetStudentInvoicesUseCase {
       throw new BadRequestError("NIS siswa harus disertakan");
     }
 
-    const student = await prisma.student.findUnique({
-      where: { studentNumber },
-      include: {
-        schoolUnit: { select: { name: true } },
-        parent: { select: { id: true, name: true, email: true } },
-        sdExtracurriculars: true,
-      },
-    });
+    const student = await this.studentRepository.findByStudentNumberWithDetails(studentNumber);
 
     if (!student) {
       throw new NotFoundError("Siswa tidak ditemukan");
@@ -43,12 +50,8 @@ export class GetStudentInvoicesUseCase {
           throw new ForbiddenError("Akses ditolak: Anda hanya diizinkan melihat tagihan anak Anda sendiri");
         }
       } else if ((user.role as any) === "WALI_KELAS") {
-        let userClassName: string | null = null;
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { className: true } as any,
-        });
-        userClassName = (dbUser as any)?.className || null;
+        const dbUser = await this.userRepository.findById(user.id);
+        const userClassName = dbUser?.className || null;
 
         if (
           student.schoolUnitId !== user.schoolUnitId ||
@@ -63,14 +66,10 @@ export class GetStudentInvoicesUseCase {
       }
     }
 
-    const tariff = await prisma.sppTariff.findUnique({
-      where: {
-        uq_school_unit_enrollment_year: {
-          schoolUnitId: student.schoolUnitId,
-          enrollmentYear: student.enrollmentYear,
-        },
-      },
-    });
+    const tariff = await this.sppTariffRepository.findByUnitAndYear(
+      student.schoolUnitId,
+      student.enrollmentYear
+    );
 
     if (!tariff) {
       throw new BadRequestError("Master tarif SPP untuk angkatan siswa ini belum dikonfigurasi");
@@ -78,24 +77,9 @@ export class GetStudentInvoicesUseCase {
 
     // Auto-reconcile any pending Pakasir invoices for this student
     try {
-      const pendingPakasir = await prisma.invoice.findMany({
-        where: {
-          studentId: student.id,
-          status: "PENDING" as any,
-          midtransOrderId: {
-            not: null,
-            startsWith: "BATCH-",
-          },
-        },
-        include: {
-          student: { select: { name: true, schoolUnitId: true } },
-        },
-      });
+      const pendingPakasir = await this.invoiceRepository.findPendingBatchByStudentId(student.id);
 
       if (pendingPakasir.length > 0) {
-        const projectSlug = process.env.PAKASIR_PROJECT_SLUG || "depodomain";
-        const apiKey = process.env.PAKASIR_API_KEY || "xxx123";
-
         const studentBatchMap = new Map<string, typeof pendingPakasir>();
         for (const inv of pendingPakasir) {
           const rawId = inv.midtransOrderId || "";
@@ -106,20 +90,14 @@ export class GetStudentInvoicesUseCase {
 
         for (const [baseOrderId, invs] of studentBatchMap.entries()) {
           const totalAmount = invs.reduce((sum, inv) => sum + inv.amount, 0);
-          const detailUrl = `https://app.pakasir.com/api/transactiondetail?project=${projectSlug}&amount=${totalAmount}&order_id=${baseOrderId}&api_key=${apiKey}`;
-          const checkResp = await fetch(detailUrl, { signal: AbortSignal.timeout(3000) });
-          if (checkResp.ok) {
-            const checkData = (await checkResp.json()) as any;
-            if (checkData?.transaction?.status === "completed") {
-              if (this.invoiceRepository) {
-                await this.invoiceRepository.processPaidInvoicesOnline(invs, "Auto-Sync");
-              }
-            }
+          const checkData = await this.pakasirService.getTransactionDetail(baseOrderId, totalAmount);
+          if (checkData?.transaction?.status === "completed") {
+            await this.invoiceRepository.processPaidInvoicesOnline(invs, "Auto-Sync");
           }
         }
       }
     } catch (autoSyncErr) {
-      logger.warn(
+      this.logger.warn(
         `Auto-sync Pakasir for student ${studentNumber} skipped: ${
           autoSyncErr instanceof Error ? autoSyncErr.message : String(autoSyncErr)
         }`
@@ -128,26 +106,18 @@ export class GetStudentInvoicesUseCase {
 
     // === LOGIKA PPDB (SISWA BARU / DAFTAR ULANG) ===
     if (student.className.toUpperCase() === "PPDB") {
-      const dbInvoices = await prisma.invoice.findMany({
-        where: {
-          studentId: student.id,
-          invoiceType: {
-            in: [
-              "UANG_PENGEMBANGAN",
-              "DAFTAR_ULANG",
-              "UANG_PERALATAN",
-              "SPP",
-              "EKSTRAKURIKULER",
-              "SERAGAM",
-            ] as any,
-          },
-        },
-        include: {
-          transactions: {
-            where: { type: "INCOME" as any },
-          },
-        },
-      });
+      const dbInvoices = await this.invoiceRepository.findByStudentAndYearWithTransactions(
+        student.id,
+        undefined,
+        [
+          "UANG_PENGEMBANGAN",
+          "DAFTAR_ULANG",
+          "UANG_PERALATAN",
+          "SPP",
+          "EKSTRAKURIKULER",
+          "SERAGAM",
+        ] as any
+      );
 
       const baseSppAmount = tariff.amount;
       const sppDiscountApplied = Math.min(baseSppAmount, student.discountAmount);
@@ -162,15 +132,11 @@ export class GetStudentInvoicesUseCase {
       let extracurricularFee = 0;
       if (!isSd && (student.schoolUnitId === 1 || student.schoolUnitId === 2)) {
         const level = student.schoolUnitId === 1 ? "KB" : "A"; // default to A for entry level RA in PPDB
-        const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-          where: {
-            uq_school_unit_enrollment_year_level: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-              level,
-            },
-          },
-        });
+        const extraTariff = await this.extraEquipmentTariffRepository.findByUnitYearAndLevel(
+          student.schoolUnitId,
+          student.enrollmentYear,
+          level
+        );
         if (extraTariff) {
           if (student.registrationStatus === "BARU") {
             equipmentFee = extraTariff.equipmentFeeNew || extraTariff.equipmentFee;
@@ -190,14 +156,10 @@ export class GetStudentInvoicesUseCase {
 
       let fulldayFee = 0;
       if (student.isFullday && (student.schoolUnitId === 1 || student.schoolUnitId === 2)) {
-        const ft = await (prisma as any).fulldayTariff.findUnique({
-          where: {
-            uq_fullday_school_unit_enrollment_year: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-            },
-          },
-        });
+        const ft = await this.fulldayTariffRepository.findByUnitAndYear(
+          student.schoolUnitId,
+          student.enrollmentYear
+        );
         if (ft) {
           fulldayFee = ft.monthlyFee;
         }
@@ -236,7 +198,7 @@ export class GetStudentInvoicesUseCase {
             ...(fulldayFee > 0 ? [{ type: "FULLDAY", base: fulldayFee, net: fulldayFee, month: 7 }] : []),
           ];
 
-      const invoices = feeTypes.map((fee) => {
+      const invoices: any[] = feeTypes.map((fee) => {
         const existing = dbInvoices.find((inv) => inv.invoiceType === fee.type && inv.month === fee.month);
         if (existing) {
           if (existing.status === "PENDING") {
@@ -282,15 +244,10 @@ export class GetStudentInvoicesUseCase {
       };
     }
 
-    const dbInvoices = await prisma.invoice.findMany({
-      where: { studentId: student.id, year },
-      include: {
-        transactions: {
-          where: { type: "INCOME" as any },
-        },
-      },
-      orderBy: { month: "asc" },
-    });
+    const dbInvoices = await this.invoiceRepository.findByStudentAndYearWithTransactions(
+      student.id,
+      year
+    );
 
     let startMonth = 1;
     if (year === student.enrollmentYear) {
@@ -298,6 +255,7 @@ export class GetStudentInvoicesUseCase {
     } else if (year === 2026) {
       startMonth = 7;
     }
+
     const invoices: any[] = Array.from({ length: 12 - startMonth + 1 }, (_, i) => {
       const month = startMonth + i;
       const existing = dbInvoices.find(
@@ -414,15 +372,11 @@ export class GetStudentInvoicesUseCase {
             : student.className.trim().toUpperCase().charAt(0) === "B"
             ? "B"
             : "A";
-        const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-          where: {
-            uq_school_unit_enrollment_year_level: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-              level,
-            },
-          },
-        });
+        const extraTariff = await this.extraEquipmentTariffRepository.findByUnitYearAndLevel(
+          student.schoolUnitId,
+          student.enrollmentYear,
+          level
+        );
 
         let equipmentFee = 0;
         if (extraTariff) {
@@ -474,15 +428,11 @@ export class GetStudentInvoicesUseCase {
             : student.className.trim().toUpperCase().charAt(0) === "B"
             ? "B"
             : "A";
-        const extraTariff = await prisma.extraEquipmentTariff.findUnique({
-          where: {
-            uq_school_unit_enrollment_year_level: {
-              schoolUnitId: student.schoolUnitId,
-              enrollmentYear: student.enrollmentYear,
-              level,
-            },
-          },
-        });
+        const extraTariff = await this.extraEquipmentTariffRepository.findByUnitYearAndLevel(
+          student.schoolUnitId,
+          student.enrollmentYear,
+          level
+        );
 
         if (extraTariff) {
           if (student.registrationStatus === "BARU") {
@@ -532,14 +482,10 @@ export class GetStudentInvoicesUseCase {
 
     // 6. FULLDAY (Monthly for KB & RA if student.isFullday is enabled)
     if (student.isFullday && (student.schoolUnitId === 1 || student.schoolUnitId === 2)) {
-      const fulldayTariff = await (prisma as any).fulldayTariff.findUnique({
-        where: {
-          uq_fullday_school_unit_enrollment_year: {
-            schoolUnitId: student.schoolUnitId,
-            enrollmentYear: student.enrollmentYear,
-          },
-        },
-      });
+      const fulldayTariff = await this.fulldayTariffRepository.findByUnitAndYear(
+        student.schoolUnitId,
+        student.enrollmentYear
+      );
       if (fulldayTariff && fulldayTariff.monthlyFee > 0) {
         for (let m = startMonth; m <= 12; m++) {
           const existingFullday = dbInvoices.find(
