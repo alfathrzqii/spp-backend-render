@@ -1,57 +1,12 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
-import { StudentController } from "../controllers/StudentController.js";
-import { PrismaStudentRepository } from "../../database/PrismaStudentRepository.js";
-import { PrismaUserRepository } from "../../database/PrismaUserRepository.js";
-import { PrismaSppTariffRepository } from "../../database/PrismaSppTariffRepository.js";
-import { PrismaSchoolUnitRepository } from "../../database/PrismaSchoolUnitRepository.js";
-import { PrismaInvoiceRepository } from "../../database/PrismaInvoiceRepository.js";
-import { PasswordHasher } from "../../services/PasswordHasher.js";
-import { CreateStudentUseCase } from "../../../application/use-cases/CreateStudentUseCase.js";
-import { GetStudentsUseCase } from "../../../application/use-cases/GetStudentsUseCase.js";
-import { UpdateStudentUseCase } from "../../../application/use-cases/UpdateStudentUseCase.js";
-import { DeleteStudentUseCase } from "../../../application/use-cases/DeleteStudentUseCase.js";
-import { ImportStudentsUseCase } from "../../../application/use-cases/ImportStudentsUseCase.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { createStudentSchema } from "../schemas/studentSchema.js";
+import { container } from "../../../main/container.js";
 
 const router = Router();
-
-// Repositories
-const studentRepo = new PrismaStudentRepository();
-const userRepo = new PrismaUserRepository();
-const sppTariffRepo = new PrismaSppTariffRepository();
-const schoolUnitRepo = new PrismaSchoolUnitRepository();
-const invoiceRepo = new PrismaInvoiceRepository();
-
-// Services
-const passwordHasher = new PasswordHasher();
-
-// Use Cases
-const createStudentUseCase = new CreateStudentUseCase(
-  studentRepo,
-  userRepo,
-  sppTariffRepo,
-  passwordHasher
-);
-const getStudentsUseCase = new GetStudentsUseCase(studentRepo);
-const updateStudentUseCase = new UpdateStudentUseCase(studentRepo, invoiceRepo);
-const deleteStudentUseCase = new DeleteStudentUseCase(studentRepo);
-const importStudentsUseCase = new ImportStudentsUseCase(
-  passwordHasher,
-  studentRepo,
-  schoolUnitRepo
-);
-
-// Controller
-const studentController = new StudentController(
-  createStudentUseCase,
-  getStudentsUseCase,
-  updateStudentUseCase,
-  deleteStudentUseCase,
-  importStudentsUseCase
-);
+const studentController = container.studentController;
 
 // Routes
 router.post(

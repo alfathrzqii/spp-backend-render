@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CreateCategoryUseCase } from './CreateCategoryUseCase.js';
-import { prismaMock } from '../../infrastructure/database/__mocks__/prisma.js';
 import { Category } from '../../domain/entities/Category.js';
 import { mockDeep } from 'vitest-mock-extended';
 import type { ICategoryRepository } from '../../domain/repositories/ICategoryRepository.js';

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import defaultPrisma from "./prisma.js";
 import { FulldayTariff } from "../../domain/entities/FulldayTariff.js";
 import type {
   IFulldayTariffRepository,
@@ -7,7 +8,7 @@ import type {
 } from "../../domain/repositories/IFulldayTariffRepository.js";
 
 export class PrismaFulldayTariffRepository implements IFulldayTariffRepository {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient = defaultPrisma) {}
 
   private mapToDomain(raw: any): FulldayTariff {
     return new FulldayTariff(
