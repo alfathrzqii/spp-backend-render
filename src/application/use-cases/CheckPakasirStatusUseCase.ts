@@ -1,8 +1,8 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { IPakasirService } from "../ports/IPakasirService.js";
+import type { ILogger } from "../../domain/services/ILogger.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
-import { logger } from "../../infrastructure/services/WinstonLogger.js";
 
 export interface CheckPakasirStatusInput {
   orderId: string;
@@ -13,7 +13,8 @@ export class CheckPakasirStatusUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
     private studentRepository: IStudentRepository,
-    private pakasirService: IPakasirService
+    private pakasirService: IPakasirService,
+    private logger?: ILogger
   ) {}
 
   async execute(input: CheckPakasirStatusInput) {
@@ -42,7 +43,7 @@ export class CheckPakasirStatusUseCase {
     }
 
     if (invoices.length === 0) {
-      logger.warn(`CheckPakasirStatusUseCase - Tagihan tidak ditemukan untuk order_id: ${orderId}`);
+      this.logger?.warn(`CheckPakasirStatusUseCase - Tagihan tidak ditemukan untuk order_id: ${orderId}`);
       throw new NotFoundError("Tagihan tidak ditemukan");
     }
 
@@ -66,7 +67,7 @@ export class CheckPakasirStatusUseCase {
     }
 
     if (transactionStatus === "completed") {
-      logger.info(`CheckPakasirStatusUseCase - Transaksi ${orderId} terverifikasi selesai di Pakasir, memproses pembaruan DB...`);
+      this.logger?.info(`CheckPakasirStatusUseCase - Transaksi ${orderId} terverifikasi selesai di Pakasir, memproses pembaruan DB...`);
       await this.invoiceRepository.processPaidInvoicesOnline(invoices, "Polling");
 
       return {

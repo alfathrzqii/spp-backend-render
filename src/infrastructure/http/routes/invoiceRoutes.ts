@@ -25,6 +25,7 @@ import { SimulatePakasirPaymentUseCase } from "../../../application/use-cases/Si
 import { PayOnlineSimulatedUseCase } from "../../../application/use-cases/PayOnlineSimulatedUseCase.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
+import { logger } from "../../services/WinstonLogger.js";
 import prisma from "../../database/prisma.js";
 
 const router = Router();
@@ -66,20 +67,24 @@ const createPakasirTransactionUseCase = new CreatePakasirTransactionUseCase(
 const checkPakasirStatusUseCase = new CheckPakasirStatusUseCase(
   invoiceRepo,
   studentRepo,
-  pakasirService
+  pakasirService,
+  logger
 );
 const handlePakasirWebhookUseCase = new HandlePakasirWebhookUseCase(
   invoiceRepo,
-  studentRepo
+  studentRepo,
+  logger
 );
 const syncPakasirTransactionsUseCase = new SyncPakasirTransactionsUseCase(
   invoiceRepo,
-  pakasirService
+  pakasirService,
+  logger
 );
 const simulatePakasirPaymentUseCase = new SimulatePakasirPaymentUseCase(
   invoiceRepo,
   studentRepo,
-  pakasirService
+  pakasirService,
+  logger
 );
 const payOnlineSimulatedUseCase = new PayOnlineSimulatedUseCase(
   invoiceRepo,

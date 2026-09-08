@@ -1,7 +1,7 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
+import type { ILogger } from "../../domain/services/ILogger.js";
 import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
-import { logger } from "../../infrastructure/services/WinstonLogger.js";
 
 export interface HandlePakasirWebhookInput {
   order_id: string;
@@ -13,21 +13,22 @@ export interface HandlePakasirWebhookInput {
 export class HandlePakasirWebhookUseCase {
   constructor(
     private invoiceRepository: IInvoiceRepository,
-    private studentRepository: IStudentRepository
+    private studentRepository: IStudentRepository,
+    private logger?: ILogger
   ) {}
 
   async execute(input: HandlePakasirWebhookInput) {
     const { order_id, status, amount, rawPayload } = input;
 
-    logger.info(`Menerima webhook Pakasir: ${JSON.stringify(rawPayload || input)}`);
+    this.logger?.info(`Menerima webhook Pakasir: ${JSON.stringify(rawPayload || input)}`);
 
     if (!order_id || !status) {
-      logger.warn(`Webhook Pakasir diabaikan: Payload tidak valid`);
+      this.logger?.warn(`Webhook Pakasir diabaikan: Payload tidak valid`);
       throw new BadRequestError("Payload webhook tidak valid");
     }
 
     if (status !== "completed") {
-      logger.info(`Webhook Pakasir untuk order_id: ${order_id} diabaikan karena status adalah "${status}"`);
+      this.logger?.info(`Webhook Pakasir untuk order_id: ${order_id} diabaikan karena status adalah "${status}"`);
       return { success: true, message: "Status transaksi bukan completed, abaikan" };
     }
 
@@ -57,20 +58,20 @@ export class HandlePakasirWebhookUseCase {
     }
 
     if (invoices.length === 0) {
-      logger.warn(`Webhook Pakasir - Tagihan tidak ditemukan untuk order_id: ${order_id}`);
+      this.logger?.warn(`Webhook Pakasir - Tagihan tidak ditemukan untuk order_id: ${order_id}`);
       throw new NotFoundError("Tagihan tidak ditemukan");
     }
 
     const allPaid = invoices.every((inv) => (inv.status as any) === "PAID");
     if (allPaid) {
-      logger.info(`Webhook Pakasir untuk order_id: ${order_id} - Semua tagihan terkait sudah berstatus PAID`);
+      this.logger?.info(`Webhook Pakasir untuk order_id: ${order_id} - Semua tagihan terkait sudah berstatus PAID`);
       return { success: true, message: "Tagihan sudah lunas" };
     }
 
-    logger.info(`Webhook Pakasir - Mulai memproses pembaruan status lunas untuk order_id: ${order_id}`);
+    this.logger?.info(`Webhook Pakasir - Mulai memproses pembaruan status lunas untuk order_id: ${order_id}`);
     await this.invoiceRepository.processPaidInvoicesOnline(invoices, "Webhook");
 
-    logger.info(`Webhook Pakasir - Berhasil memproses pembayaran untuk order_id: ${order_id}`);
+    this.logger?.info(`Webhook Pakasir - Berhasil memproses pembayaran untuk order_id: ${order_id}`);
     return { success: true, message: "Webhook berhasil diproses" };
   }
 }
