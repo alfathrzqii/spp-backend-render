@@ -58,11 +58,12 @@ export class PakasirController {
 
   async handlePakasirWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { order_id, status, amount } = req.body;
+      const { order_id, status, amount, project } = req.body;
       const result = await this.handlePakasirWebhookUseCase.execute({
         order_id,
         status,
         amount: amount ? Number(amount) : undefined,
+        project: project ? String(project) : undefined,
         rawPayload: req.body,
       });
 

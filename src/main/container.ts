@@ -210,6 +210,7 @@ export class Container {
   public readonly handlePakasirWebhookUseCase = new HandlePakasirWebhookUseCase(
     this.invoiceRepository,
     this.studentRepository,
+    this.pakasirService,
     this.logger
   );
   public readonly syncPakasirTransactionsUseCase = new SyncPakasirTransactionsUseCase(
