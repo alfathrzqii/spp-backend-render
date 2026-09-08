@@ -46,3 +46,24 @@ export const authMiddleware = (
     });
   }
 };
+
+export const optionalAuthMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  const token = req.cookies?.token;
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = tokenService.verifyToken(token);
+    req.user = decoded;
+  } catch {
+    // Sesi tidak valid atau expired diabaikan, lanjutkan sebagai guest
+  }
+
+  next();
+};

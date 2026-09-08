@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "../middlewares/authMiddleware.js";
+import { authMiddleware, optionalAuthMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { offlinePaymentSchema } from "../schemas/paymentSchema.js";
@@ -40,6 +40,7 @@ router.get(
 
 router.get(
   "/student/:studentNumber",
+  optionalAuthMiddleware,
   invoiceController.getStudentInvoices.bind(invoiceController)
 );
 

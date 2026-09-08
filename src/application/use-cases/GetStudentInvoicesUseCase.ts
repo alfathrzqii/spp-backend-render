@@ -44,6 +44,7 @@ export class GetStudentInvoicesUseCase {
       throw new NotFoundError("Siswa tidak ditemukan");
     }
 
+    // Role-based access control when authenticated
     if (user) {
       if ((user.role as any) === "PARENT") {
         if (student.parentId !== user.id) {
@@ -516,10 +517,37 @@ export class GetStudentInvoicesUseCase {
       }
     }
 
+    const maskPhoneNumber = (phone: string | null | undefined): string | null => {
+      if (!phone) return null;
+      const clean = phone.trim();
+      if (clean.length <= 6) return "****";
+      return clean.slice(0, 4) + "****" + clean.slice(-2);
+    };
+
+    const maskEmail = (email: string | null | undefined): string | null => {
+      if (!email) return null;
+      const atIndex = email.indexOf("@");
+      if (atIndex <= 1) return "***" + email.slice(atIndex);
+      return email.slice(0, 2) + "***" + email.slice(atIndex);
+    };
+
+    const sanitizedStudent = user
+      ? student
+      : {
+          ...student,
+          parent: student.parent
+            ? {
+                ...student.parent,
+                phoneNumber: maskPhoneNumber(student.parent.phoneNumber),
+                email: maskEmail(student.parent.email),
+              }
+            : null,
+        };
+
     return {
       invoices,
       allInvoices: dbInvoices,
-      student,
+      student: sanitizedStudent,
       isPpdb: false,
     };
   }
