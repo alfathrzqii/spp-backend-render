@@ -23,6 +23,8 @@ import { errorHandler } from "../infrastructure/http/middlewares/errorHandler.js
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 app.use(httpLogger);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
