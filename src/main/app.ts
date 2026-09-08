@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import { corsOptions } from "../infrastructure/http/middlewares/corsConfig.js";
 import cookieParser from "cookie-parser";
 import httpLogger from "../infrastructure/http/middlewares/httpLogger.js";
 import { logger } from "../infrastructure/services/WinstonLogger.js";
@@ -25,7 +26,7 @@ const app = express();
 app.use(httpLogger);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ credentials: true, origin: true }));
+app.use(cors(corsOptions));
 app.use(cookieParser());
 
 // Routes

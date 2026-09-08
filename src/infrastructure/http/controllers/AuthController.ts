@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import type { LoginUseCase } from "../../../application/use-cases/LoginUseCase.js";
 import type { GetMeUseCase } from "../../../application/use-cases/GetMeUseCase.js";
 import type { ITokenService } from "../../../application/ports/index.js";
+import { getAuthCookieOptions, getClearAuthCookieOptions } from "../utils/cookieConfig.js";
 
 export class AuthController {
   constructor(
@@ -23,13 +24,7 @@ export class AuthController {
         schoolUnitId: user.schoolUnitId,
       });
 
-      const isProduction = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "strict",
-        maxAge: 15 * 60 * 1000,
-      });
+      res.cookie("token", token, getAuthCookieOptions(req));
 
       res.status(200).json({
         success: true,
@@ -63,12 +58,7 @@ export class AuthController {
 
   async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const isProduction = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
-      res.clearCookie("token", {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "strict",
-      });
+      res.clearCookie("token", getClearAuthCookieOptions(req));
       res.status(200).json({
         success: true,
         message: "Logout berhasil",

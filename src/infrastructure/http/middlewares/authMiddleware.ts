@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { TokenService } from "../../services/TokenService.js";
+import { getAuthCookieOptions } from "../utils/cookieConfig.js";
 
 const tokenService = new TokenService();
 
@@ -30,13 +31,7 @@ export const authMiddleware = (
       schoolUnitId: decoded.schoolUnitId,
     });
 
-    const isProduction = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
-    res.cookie("token", newToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "strict",
-      maxAge: 15 * 60 * 1000, // extend for another 15 minutes
-    });
+    res.cookie("token", newToken, getAuthCookieOptions(req));
 
     next();
   } catch (error) {
