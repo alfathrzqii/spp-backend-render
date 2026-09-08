@@ -30,6 +30,14 @@ class WinstonLogger implements ILogger {
         })
       );
     } else {
+      // Stream structured JSON logs to Console (stdout) for Render & PM2 log viewers
+      transports.push(
+        new winston.transports.Console({
+          format: logFormat,
+        })
+      );
+
+      // Persist logs to local files
       transports.push(
         new winston.transports.File({
           filename: "logs/error.log",
