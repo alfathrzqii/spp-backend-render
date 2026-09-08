@@ -1,18 +1,15 @@
 import type { Request, Response, NextFunction } from "express";
-import { ForbiddenError, NotFoundError } from "../../../domain/errors/AppError.js";
 import { CreateCategoryUseCase } from "../../../application/use-cases/CreateCategoryUseCase.js";
 import { GetCategoriesUseCase } from "../../../application/use-cases/GetCategoriesUseCase.js";
 import { UpdateCategoryUseCase } from "../../../application/use-cases/UpdateCategoryUseCase.js";
 import { DeleteCategoryUseCase } from "../../../application/use-cases/DeleteCategoryUseCase.js";
-import type { ICategoryRepository } from "../../../domain/repositories/ICategoryRepository.js";
 
 export class CategoryController {
   constructor(
     private createCategoryUseCase: CreateCategoryUseCase,
     private getCategoriesUseCase: GetCategoriesUseCase,
     private updateCategoryUseCase: UpdateCategoryUseCase,
-    private deleteCategoryUseCase: DeleteCategoryUseCase,
-    private categoryRepository: ICategoryRepository
+    private deleteCategoryUseCase: DeleteCategoryUseCase
   ) {}
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -67,22 +64,15 @@ export class CategoryController {
       const user = req.user!;
       const categoryId = Number(id);
 
-      const category = await this.categoryRepository.findById(categoryId);
-      if (!category) {
-        throw new NotFoundError("Kategori tidak ditemukan");
-      }
-
-      if (user.role === "UNIT_ADMIN") {
-        if (category.schoolUnitId !== user.schoolUnitId) {
-          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini");
-        }
-      }
-
       const { name, type } = req.body;
-      const result = await this.updateCategoryUseCase.execute(categoryId, {
-        name,
-        type,
-      });
+      const result = await this.updateCategoryUseCase.execute(
+        categoryId,
+        {
+          name,
+          type,
+        },
+        user
+      );
 
       res.status(200).json({
         success: true,
@@ -100,18 +90,7 @@ export class CategoryController {
       const user = req.user!;
       const categoryId = Number(id);
 
-      const category = await this.categoryRepository.findById(categoryId);
-      if (!category) {
-        throw new NotFoundError("Kategori tidak ditemukan");
-      }
-
-      if (user.role === "UNIT_ADMIN") {
-        if (category.schoolUnitId !== user.schoolUnitId) {
-          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini");
-        }
-      }
-
-      await this.deleteCategoryUseCase.execute(categoryId);
+      await this.deleteCategoryUseCase.execute(categoryId, user);
 
       res.status(200).json({
         success: true,

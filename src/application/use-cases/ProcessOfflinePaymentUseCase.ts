@@ -4,7 +4,23 @@ import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffR
 import type { IExtraEquipmentTariffRepository } from "../../domain/repositories/IExtraEquipmentTariffRepository.js";
 import type { IFulldayTariffRepository } from "../../domain/repositories/IFulldayTariffRepository.js";
 import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from "../../domain/enums/index.js";
-import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../domain/errors/AppError.js";
+
+export interface ProcessOfflinePaymentInput {
+  studentId?: number | undefined;
+  studentNumber?: string | undefined;
+  month: number;
+  year: number;
+  recordedById: number;
+  user?: {
+    id: number;
+    role: string;
+    schoolUnitId: number | null;
+  } | undefined;
+  invoiceType?: InvoiceType | undefined;
+  paymentAmount?: number | undefined;
+  paymentMethod?: PaymentMethod | undefined;
+}
 
 export class ProcessOfflinePaymentUseCase {
   constructor(
@@ -15,30 +31,56 @@ export class ProcessOfflinePaymentUseCase {
     private fulldayTariffRepository?: IFulldayTariffRepository
   ) {}
 
-  async execute(input: {
-    studentId: number;
-    month: number;
-    year: number;
-    recordedById: number;
-    invoiceType?: InvoiceType | undefined;
-    paymentAmount?: number | undefined;
-    paymentMethod?: PaymentMethod | undefined;
-  }) {
+  async execute(input: ProcessOfflinePaymentInput) {
     const {
       studentId,
+      studentNumber,
       month,
       year,
       recordedById,
+      user,
       invoiceType = InvoiceType.SPP,
       paymentAmount,
       paymentMethod = PaymentMethod.CASH,
     } = input;
 
+    let student: any;
+    if (studentId) {
+      student = await this.studentRepository.findById(studentId);
+    } else if (studentNumber) {
+      student = await this.studentRepository.findByStudentNumber(studentNumber);
+    }
+
+    if (!student) {
+      throw new NotFoundError("Gagal: Siswa tidak ditemukan");
+    }
+
+    const finalStudentId = student.id;
+
+    if (user && (user.role as any) === "UNIT_ADMIN") {
+      if (student.schoolUnitId !== user.schoolUnitId) {
+        throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola unit sekolah ini");
+      }
+    }
+
+    const yearNum = Number(year);
+    const monthNum = Number(month);
+
+    if (
+      yearNum < student.enrollmentYear ||
+      (yearNum === student.enrollmentYear && monthNum < 7) ||
+      (yearNum === 2026 && monthNum < 7)
+    ) {
+      throw new BadRequestError(
+        "Akses ditolak: Tagihan tidak tersedia untuk periode sebelum siswa terdaftar atau sebelum sistem dimulai (Juli 2026)"
+      );
+    }
+
     // 1. Validasi Eksistensi Invoice
     const existingInvoice = await this.invoiceRepository.findByUniqueComposite(
-      studentId,
-      month,
-      year,
+      finalStudentId,
+      monthNum,
+      yearNum,
       invoiceType
     );
 
@@ -48,12 +90,6 @@ export class ProcessOfflinePaymentUseCase {
 
     // 2. Kalkulasi & Snapshot Tarif Dasar (Jika Invoice Belum Ada)
     let invoiceData: any;
-    let student: any;
-
-    student = await this.studentRepository.findById(studentId);
-    if (!student) {
-      throw new NotFoundError("Gagal: Siswa tidak ditemukan");
-    }
 
     const tariff = await this.sppTariffRepository.findByUnitAndYear(
       student.schoolUnitId,
@@ -101,7 +137,11 @@ export class ProcessOfflinePaymentUseCase {
       discountApplied = Math.min(baseAmount, student.discountEquipment || 0);
     } else if (invoiceType === InvoiceType.EKSTRAKURIKULER) {
       let extraFee = 0;
-      if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.extraEquipmentTariffRepository) {
+      if (student.schoolUnitId === 3) {
+        if (student.sdExtracurriculars && student.sdExtracurriculars.length > 0) {
+          extraFee = student.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
+        }
+      } else if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.extraEquipmentTariffRepository) {
         const level = student.schoolUnitId === 1 
           ? "KB" 
           : (student.className.trim().toUpperCase().charAt(0) === "B" ? "B" : "A");
@@ -121,10 +161,6 @@ export class ProcessOfflinePaymentUseCase {
             extraFee = extraTariff.extracurricularFeeNew || extraTariff.extracurricularFee;
           }
         }
-      } else if (student.schoolUnitId === 3) {
-        if (student.sdExtracurriculars) {
-          extraFee = student.sdExtracurriculars.reduce((sum: number, e: any) => sum + (e.fee || 0), 0);
-        }
       }
       baseAmount = extraFee;
       discountApplied = Math.min(baseAmount, student.discountExtracurricular || 0);
@@ -132,7 +168,7 @@ export class ProcessOfflinePaymentUseCase {
       baseAmount = tariff.uniformFee;
     } else if (invoiceType === InvoiceType.FULLDAY) {
       let fulldayFee = 0;
-      if ((student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.fulldayTariffRepository) {
+      if (student.isFullday && (student.schoolUnitId === 1 || student.schoolUnitId === 2) && this.fulldayTariffRepository) {
         const ft = await this.fulldayTariffRepository.findByUnitAndYear(
           student.schoolUnitId,
           student.enrollmentYear
@@ -174,10 +210,10 @@ export class ProcessOfflinePaymentUseCase {
 
     if (!existingInvoice) {
       invoiceData = {
-        studentId,
+        studentId: finalStudentId,
         invoiceType,
-        month,
-        year,
+        month: monthNum,
+        year: yearNum,
         baseAmount,
         discountApplied,
         amount: totalInvoiceAmount,
@@ -208,7 +244,7 @@ export class ProcessOfflinePaymentUseCase {
       type: CategoryType.INCOME,
       paymentMethod,
       amount: paymentTxAmount,
-      description: `Pembayaran ${categoryName} offline ${isTransfer ? "transfer bank" : "tunai"} bulan ${month} tahun ${year} untuk siswa ${student.name}`,
+      description: `Pembayaran ${categoryName} offline ${isTransfer ? "transfer bank" : "tunai"} bulan ${monthNum} tahun ${yearNum} untuk siswa ${student.name}`,
       schoolUnitId: student.schoolUnitId,
       recordedById,
     };

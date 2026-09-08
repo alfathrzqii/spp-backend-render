@@ -24,8 +24,7 @@ const categoryController = new CategoryController(
   createCategoryUseCase,
   getCategoriesUseCase,
   updateCategoryUseCase,
-  deleteCategoryUseCase,
-  categoryRepository
+  deleteCategoryUseCase
 );
 
 // Registrasi Route API

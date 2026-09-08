@@ -1,15 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
-import { UnauthorizedError } from "../../../domain/errors/AppError.js";
 import type { LoginUseCase } from "../../../application/use-cases/LoginUseCase.js";
-import type { IPasswordHasher, ITokenService } from "../../../application/ports/index.js";
-import type { IUserRepository } from "../../../domain/repositories/IUserRepository.js";
+import type { GetMeUseCase } from "../../../application/use-cases/GetMeUseCase.js";
+import type { ITokenService } from "../../../application/ports/index.js";
 
 export class AuthController {
   constructor(
     private loginUseCase: LoginUseCase,
-    private passwordHasher: IPasswordHasher,
-    private tokenService: ITokenService,
-    private userRepository: IUserRepository
+    private getMeUseCase: GetMeUseCase,
+    private tokenService: ITokenService
   ) {}
 
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -51,28 +49,12 @@ export class AuthController {
 
   async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = req.user?.id;
-
-      if (!userId) {
-        throw new UnauthorizedError("Autentikasi gagal: Sesi tidak valid atau telah berakhir");
-      }
-
-      const user = await this.userRepository.findById(userId);
-
-      if (!user) {
-        throw new UnauthorizedError("Autentikasi gagal: Sesi tidak valid atau telah berakhir");
-      }
+      const userProfile = await this.getMeUseCase.execute(req.user?.id);
 
       res.status(200).json({
         success: true,
         message: "Sesi pengguna aktif",
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          schoolUnitId: user.schoolUnitId,
-        },
+        data: userProfile,
       });
     } catch (error) {
       next(error);
