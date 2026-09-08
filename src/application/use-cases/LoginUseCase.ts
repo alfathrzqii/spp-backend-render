@@ -19,7 +19,7 @@ export class LoginUseCase {
       user = await this.userRepository.findByPhoneNumber(identifier);
     }
 
-    if (!user) {
+    if (!user || !user.password) {
       throw new UnauthorizedError("Email/Nomor HP atau password salah");
     }
 

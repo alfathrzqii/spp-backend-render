@@ -17,7 +17,7 @@ export class PrismaUserRepository implements IUserRepository {
       userData.name,
       userData.email,
       userData.phoneNumber,
-      userData.password,
+      userData.password !== undefined ? userData.password : undefined,
       userData.role as Role,
       userData.schoolUnitId,
       userData.className || null
@@ -57,7 +57,6 @@ export class PrismaUserRepository implements IUserRepository {
         role: true,
         schoolUnitId: true,
         className: true,
-        password: true,
         schoolUnit: { select: { name: true } },
       },
       orderBy: { name: "asc" },
