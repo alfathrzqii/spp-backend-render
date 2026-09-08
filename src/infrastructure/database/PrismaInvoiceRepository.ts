@@ -2,6 +2,7 @@ import type { InvoiceStatus, InvoiceType, CategoryType, PaymentMethod } from "..
 import type { IInvoiceRepository, InvoiceWithDetailsDTO, BatchInvoiceItemDTO } from "../../domain/repositories/IInvoiceRepository.js";
 import { Invoice } from "../../domain/entities/Invoice.js";
 import { Transaction } from "../../domain/entities/Transaction.js";
+import { BadRequestError } from "../../domain/errors/AppError.js";
 import prisma from "./prisma.js";
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
@@ -290,10 +291,6 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
             },
           });
         }
-      } else if (status !== "PAID") {
-        await tx.transaction.deleteMany({
-          where: { invoiceId: id },
-        });
       }
 
       return this.mapToDomain(updated);
@@ -301,13 +298,28 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
   }
 
   async delete(id: number): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.transaction.deleteMany({
-        where: { invoiceId: id },
-      });
-      await tx.invoice.delete({
-        where: { id },
-      });
+    const transactionCount = await this.prisma.transaction.count({
+      where: { invoiceId: id },
+    });
+
+    if (transactionCount > 0) {
+      throw new BadRequestError(
+        "Tidak dapat menghapus tagihan yang sudah memiliki riwayat transaksi pembayaran. Silakan ubah status tagihan menjadi VOID."
+      );
+    }
+
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+    });
+
+    if (invoice && invoice.status === "PAID") {
+      throw new BadRequestError(
+        "Tidak dapat menghapus tagihan yang sudah berstatus LUNAS (PAID)."
+      );
+    }
+
+    await this.prisma.invoice.delete({
+      where: { id },
     });
   }
 

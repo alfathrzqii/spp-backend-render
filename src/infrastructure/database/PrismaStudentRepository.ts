@@ -5,6 +5,7 @@ import type {
   StudentWithFullDetailsDTO,
 } from "../../domain/repositories/IStudentRepository.js";
 import { Student } from "../../domain/entities/Student.js";
+import { BadRequestError } from "../../domain/errors/AppError.js";
 
 export class PrismaStudentRepository implements IStudentRepository {
   private prisma = prisma;
@@ -340,8 +341,8 @@ export class PrismaStudentRepository implements IStudentRepository {
   }
 
   async delete(id: number): Promise<void> {
-    // 1. Delete transactions linked to student's invoices
-    await this.prisma.transaction.deleteMany({
+    // 1. Cek apakah ada transaksi kas yang terikat dengan tagihan siswa ini
+    const transactionCount = await this.prisma.transaction.count({
       where: {
         invoice: {
           studentId: id,
@@ -349,14 +350,34 @@ export class PrismaStudentRepository implements IStudentRepository {
       },
     });
 
-    // 2. Delete invoices linked to student
+    if (transactionCount > 0) {
+      throw new BadRequestError(
+        "Tidak dapat menghapus siswa yang sudah memiliki riwayat transaksi buku kas. Ubah status siswa menjadi NONAKTIF atau LULUS."
+      );
+    }
+
+    // 2. Cek apakah ada tagihan yang sudah lunas (PAID)
+    const paidInvoiceCount = await this.prisma.invoice.count({
+      where: {
+        studentId: id,
+        status: "PAID",
+      },
+    });
+
+    if (paidInvoiceCount > 0) {
+      throw new BadRequestError(
+        "Tidak dapat menghapus siswa yang memiliki riwayat tagihan terbayar. Ubah status siswa menjadi NONAKTIF atau LULUS."
+      );
+    }
+
+    // 3. Hapus tagihan yang masih berstatus PENDING (jika siswa belum pernah membayar)
     await this.prisma.invoice.deleteMany({
       where: {
         studentId: id,
       },
     });
 
-    // 3. Delete student record
+    // 4. Hapus data siswa
     await this.prisma.student.delete({
       where: { id },
     });
