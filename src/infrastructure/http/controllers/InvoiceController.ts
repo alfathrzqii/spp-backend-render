@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from "express";
-import { ForbiddenError, NotFoundError } from "../../../domain/errors/AppError.js";
 import type { ProcessOfflinePaymentUseCase } from "../../../application/use-cases/ProcessOfflinePaymentUseCase.js";
 import type { GetAllInvoicesUseCase } from "../../../application/use-cases/GetAllInvoicesUseCase.js";
 import type { UpdateInvoiceStatusUseCase } from "../../../application/use-cases/UpdateInvoiceStatusUseCase.js";
@@ -7,12 +6,10 @@ import type { DeleteInvoiceUseCase } from "../../../application/use-cases/Delete
 import type { GetUnpaidInvoicesUseCase } from "../../../application/use-cases/GetUnpaidInvoicesUseCase.js";
 import type { GetClassRecapUseCase } from "../../../application/use-cases/GetClassRecapUseCase.js";
 import type { GetStudentInvoicesUseCase } from "../../../application/use-cases/GetStudentInvoicesUseCase.js";
-import type { IStudentRepository } from "../../../domain/repositories/IStudentRepository.js";
 
 export class InvoiceController {
   constructor(
     private processOfflinePaymentUseCase: ProcessOfflinePaymentUseCase,
-    private studentRepository: IStudentRepository,
     private getAllInvoicesUseCase: GetAllInvoicesUseCase,
     private updateInvoiceStatusUseCase: UpdateInvoiceStatusUseCase,
     private deleteInvoiceUseCase: DeleteInvoiceUseCase,
@@ -26,42 +23,17 @@ export class InvoiceController {
       const user = req.user!;
       const { studentNumber, month, year, invoiceType, paymentAmount, paymentMethod } = req.body;
 
-      const student = await this.studentRepository.findByStudentNumber(studentNumber);
-      if (!student) {
-        throw new NotFoundError("Siswa tidak ditemukan");
-      }
-
-      if ((user.role as any) === "UNIT_ADMIN") {
-        if (student.schoolUnitId !== user.schoolUnitId) {
-          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola unit sekolah ini");
-        }
-      }
-
-      const yearNum = Number(year);
-      const monthNum = Number(month);
-
-      if (
-        yearNum < student.enrollmentYear ||
-        (yearNum === student.enrollmentYear && monthNum < 7) ||
-        (yearNum === 2026 && monthNum < 7)
-      ) {
-        res.status(400).json({
-          success: false,
-          message: "Akses ditolak: Tagihan tidak tersedia untuk periode sebelum siswa terdaftar atau sebelum sistem dimulai (Juli 2026)",
-        });
-        return;
-      }
-
       let method: "CASH" | "TRANSFER" = "CASH";
       if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
         method = "TRANSFER";
       }
 
       const result = await this.processOfflinePaymentUseCase.execute({
-        studentId: student.id,
+        studentNumber,
         month: Number(month),
         year: Number(year),
         recordedById: user.id,
+        user,
         invoiceType: invoiceType as any,
         paymentAmount: paymentAmount !== undefined ? Number(paymentAmount) : undefined,
         paymentMethod: method as any,

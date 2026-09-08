@@ -1,10 +1,10 @@
-﻿import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
 import type { IReRegistrationTariffRepository } from "../../domain/repositories/IReRegistrationTariffRepository.js";
 import type { IExtraEquipmentTariffRepository } from "../../domain/repositories/IExtraEquipmentTariffRepository.js";
 import { InvoiceType, InvoiceStatus, PaymentMethod } from "../../domain/enums/index.js";
-import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../domain/errors/AppError.js";
 
 export interface PayOnlineSimulatedInput {
   studentNumber: string;
@@ -12,6 +12,11 @@ export interface PayOnlineSimulatedInput {
   month?: number | undefined;
   year?: number | undefined;
   invoiceType?: string | undefined;
+  user?: {
+    id: number;
+    role: string;
+    schoolUnitId: number | null;
+  } | undefined;
 }
 
 export class PayOnlineSimulatedUseCase {
@@ -24,11 +29,23 @@ export class PayOnlineSimulatedUseCase {
   ) {}
 
   async execute(input: PayOnlineSimulatedInput) {
-    const { studentNumber } = input;
+    const { studentNumber, user } = input;
 
     const student = await this.studentRepository.findByStudentNumber(studentNumber);
     if (!student) {
       throw new NotFoundError("Siswa tidak ditemukan");
+    }
+
+    if (user) {
+      if ((user.role as any) === "PARENT") {
+        if (student.parentId !== user.id) {
+          throw new ForbiddenError("Akses ditolak: Anda hanya diizinkan membayar tagihan anak Anda sendiri");
+        }
+      } else if ((user.role as any) === "UNIT_ADMIN") {
+        if (student.schoolUnitId !== user.schoolUnitId) {
+          throw new ForbiddenError("Akses ditolak: Anda hanya diizinkan memproses tagihan siswa unit sekolah Anda");
+        }
+      }
     }
 
     let invoiceItems: Array<{ month: number; year: number; invoiceType: string }> = [];

@@ -1,12 +1,10 @@
-﻿import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import type { CreatePakasirTransactionUseCase } from "../../../application/use-cases/CreatePakasirTransactionUseCase.js";
 import type { CheckPakasirStatusUseCase } from "../../../application/use-cases/CheckPakasirStatusUseCase.js";
 import type { HandlePakasirWebhookUseCase } from "../../../application/use-cases/HandlePakasirWebhookUseCase.js";
 import type { SyncPakasirTransactionsUseCase } from "../../../application/use-cases/SyncPakasirTransactionsUseCase.js";
 import type { SimulatePakasirPaymentUseCase } from "../../../application/use-cases/SimulatePakasirPaymentUseCase.js";
 import type { PayOnlineSimulatedUseCase } from "../../../application/use-cases/PayOnlineSimulatedUseCase.js";
-import type { IStudentRepository } from "../../../domain/repositories/IStudentRepository.js";
-import { ForbiddenError, NotFoundError } from "../../../domain/errors/AppError.js";
 
 export class PakasirController {
   constructor(
@@ -15,8 +13,7 @@ export class PakasirController {
     private handlePakasirWebhookUseCase: HandlePakasirWebhookUseCase,
     private syncPakasirTransactionsUseCase: SyncPakasirTransactionsUseCase,
     private simulatePakasirPaymentUseCase: SimulatePakasirPaymentUseCase,
-    private payOnlineSimulatedUseCase: PayOnlineSimulatedUseCase,
-    private studentRepository: IStudentRepository
+    private payOnlineSimulatedUseCase: PayOnlineSimulatedUseCase
   ) {}
 
   async createPakasirTransaction(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -128,27 +125,13 @@ export class PakasirController {
       const user = req.user!;
       const { studentNumber, invoices, month, year, invoiceType } = req.body;
 
-      const student = await this.studentRepository.findByStudentNumber(studentNumber);
-      if (!student) {
-        throw new NotFoundError("Siswa tidak ditemukan");
-      }
-
-      if ((user.role as any) === "PARENT") {
-        if (student.parentId !== user.id) {
-          throw new ForbiddenError("Akses ditolak: Anda hanya diizinkan membayar tagihan anak Anda sendiri");
-        }
-      } else if ((user.role as any) === "UNIT_ADMIN") {
-        if (student.schoolUnitId !== user.schoolUnitId) {
-          throw new ForbiddenError("Akses ditolak: Anda hanya diizinkan memproses tagihan siswa unit sekolah Anda");
-        }
-      }
-
       const result = await this.payOnlineSimulatedUseCase.execute({
         studentNumber,
         invoices,
         month,
         year,
         invoiceType,
+        user,
       });
 
       res.status(200).json({

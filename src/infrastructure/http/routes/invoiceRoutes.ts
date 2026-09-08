@@ -127,13 +127,11 @@ const pakasirController = new PakasirController(
   handlePakasirWebhookUseCase,
   syncPakasirTransactionsUseCase,
   simulatePakasirPaymentUseCase,
-  payOnlineSimulatedUseCase,
-  studentRepo
+  payOnlineSimulatedUseCase
 );
 
 const invoiceController = new InvoiceController(
   processOfflinePaymentUseCase,
-  studentRepo,
   getAllInvoicesUseCase,
   updateInvoiceStatusUseCase,
   deleteInvoiceUseCase,
