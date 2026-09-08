@@ -190,6 +190,10 @@ model Transaction {
   schoolUnit SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Restrict)
   recordedBy User?      @relation("RecorderToTransactions", fields: [recordedById], references: [id], onDelete: SetNull)
 
+  @@index([schoolUnitId, date])
+  @@index([date])
+  @@index([invoiceId])
+  @@index([categoryId])
   @@map("transactions")
 }
 
