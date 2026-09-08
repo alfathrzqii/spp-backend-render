@@ -29,6 +29,10 @@ export class PayOnlineSimulatedUseCase {
   ) {}
 
   async execute(input: PayOnlineSimulatedInput) {
+    if (process.env.NODE_ENV === "production") {
+      throw new ForbiddenError("Simulasi pembayaran dinonaktifkan pada lingkungan produksi");
+    }
+
     const { studentNumber, user } = input;
 
     const student = await this.studentRepository.findByStudentNumber(studentNumber);

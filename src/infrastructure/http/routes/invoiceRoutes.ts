@@ -67,6 +67,8 @@ router.post(
 
 router.post(
   "/pakasir/simulate",
+  authMiddleware,
+  roleMiddleware(["SUPER_ADMIN"]),
   pakasirController.simulatePakasirPayment.bind(pakasirController)
 );
 

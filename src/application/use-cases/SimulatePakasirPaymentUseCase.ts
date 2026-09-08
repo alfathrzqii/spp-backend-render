@@ -2,7 +2,7 @@ import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepos
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { IPakasirService } from "../ports/IPakasirService.js";
 import type { ILogger } from "../../domain/services/ILogger.js";
-import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../domain/errors/AppError.js";
 
 export interface SimulatePakasirPaymentInput {
   orderId: string;
@@ -18,6 +18,10 @@ export class SimulatePakasirPaymentUseCase {
   ) {}
 
   async execute(input: SimulatePakasirPaymentInput) {
+    if (process.env.NODE_ENV === "production") {
+      throw new ForbiddenError("Simulasi pembayaran dinonaktifkan pada lingkungan produksi");
+    }
+
     const { orderId, amount } = input;
 
     if (!orderId) {
