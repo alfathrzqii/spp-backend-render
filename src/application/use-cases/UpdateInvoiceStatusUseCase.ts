@@ -9,6 +9,7 @@ export interface UpdateInvoiceStatusInput {
   status: InvoiceStatus;
   paymentMethod?: PaymentMethod | undefined;
   recordedById?: number | null | undefined;
+  amount?: number | undefined;
 }
 
 export class UpdateInvoiceStatusUseCase {
@@ -44,21 +45,37 @@ export class UpdateInvoiceStatusUseCase {
     const schoolUnitId = student ? student.schoolUnitId : 1;
     const studentName = student ? student.name : "Siswa";
 
-    let txAmount = invoice.amount;
-    if ((!txAmount || txAmount <= 0) && student && this.sppTariffRepository) {
+    let baseAmount = invoice.baseAmount;
+    let discountApplied = invoice.discountApplied;
+    let targetAmount = invoice.amount;
+
+    if (student && this.sppTariffRepository && invoice.invoiceType === "SPP") {
       const tariff = await this.sppTariffRepository.findByUnitAndYear(
         student.schoolUnitId,
         student.enrollmentYear
       );
       if (tariff) {
-        const disc = student.discountAmount || 0;
-        txAmount = Math.max(0, tariff.amount - disc);
+        baseAmount = tariff.amount;
+        discountApplied = Math.min(baseAmount, student.discountAmount || 0);
+        targetAmount = Math.max(0, baseAmount - discountApplied);
       }
+    } else if (student && invoice.invoiceType === "UANG_PERALATAN") {
+      const disc = Math.min(baseAmount, student.discountEquipment || 0);
+      discountApplied = disc;
+      targetAmount = Math.max(0, baseAmount - disc);
+    } else if (student && invoice.invoiceType === "EKSTRAKURIKULER") {
+      const disc = Math.min(baseAmount, student.discountExtracurricular || 0);
+      discountApplied = disc;
+      targetAmount = Math.max(0, baseAmount - disc);
     }
+
+    const txAmount = input.amount !== undefined && input.amount > 0 ? input.amount : targetAmount;
 
     const updatedInvoice = await this.invoiceRepository.updateStatus(invoiceId, status, {
       paymentMethod: chosenMethod,
       amount: txAmount,
+      baseAmount,
+      discountApplied,
       recordedById: recordedById ?? null,
       categoryName,
       description: `Pembaruan status lunas manual (${chosenMethod === PaymentMethod.TRANSFER ? "Transfer Bank" : "Tunai"}) oleh Admin SPP bulan ${invoice.month} tahun ${invoice.year} untuk siswa ${studentName}`,

@@ -111,6 +111,8 @@ export interface IInvoiceRepository {
     paymentDetails?: {
       paymentMethod: PaymentMethod;
       amount?: number | undefined;
+      baseAmount?: number | undefined;
+      discountApplied?: number | undefined;
       recordedById?: number | null | undefined;
       categoryName: string;
       description: string;

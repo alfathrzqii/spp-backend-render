@@ -148,7 +148,7 @@ export class InvoiceController {
   async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const { status, paymentMethod } = req.body;
+      const { status, paymentMethod, amount } = req.body;
 
       let method: any = "CASH";
       if (paymentMethod && (paymentMethod.toUpperCase() === "TRANSFER" || paymentMethod.toLowerCase() === "tf_manual")) {
@@ -160,6 +160,7 @@ export class InvoiceController {
         status,
         paymentMethod: method,
         recordedById: req.user?.id,
+        amount: amount !== undefined && amount !== null ? Number(amount) : undefined,
       });
 
       res.status(200).json({

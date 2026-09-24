@@ -241,6 +241,8 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     paymentDetails?: {
       paymentMethod: PaymentMethod;
       amount?: number | undefined;
+      baseAmount?: number | undefined;
+      discountApplied?: number | undefined;
       recordedById?: number | null | undefined;
       categoryName: string;
       description: string;
@@ -248,9 +250,20 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     }
   ): Promise<Invoice> {
     return await this.prisma.$transaction(async (tx) => {
+      const updateData: any = { status: status as any };
+      if (paymentDetails?.amount !== undefined) {
+        updateData.amount = paymentDetails.amount;
+      }
+      if (paymentDetails?.baseAmount !== undefined) {
+        updateData.baseAmount = paymentDetails.baseAmount;
+      }
+      if (paymentDetails?.discountApplied !== undefined) {
+        updateData.discountApplied = paymentDetails.discountApplied;
+      }
+
       const updated = await tx.invoice.update({
         where: { id },
-        data: { status: status as any },
+        data: updateData,
       });
 
       if (status === "PENDING") {
@@ -262,7 +275,17 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
           where: { invoiceId: id, type: "INCOME" as any },
         });
 
-        if (!existingTx) {
+        let txAmount = paymentDetails.amount ?? updated.amount;
+
+        if (existingTx) {
+          await tx.transaction.update({
+            where: { id: existingTx.id },
+            data: {
+              amount: txAmount,
+              paymentMethod: paymentDetails.paymentMethod as any,
+            },
+          });
+        } else {
           let category = await tx.category.findFirst({
             where: {
               name: { equals: paymentDetails.categoryName, mode: "insensitive" },
@@ -279,8 +302,6 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
               },
             });
           }
-
-          let txAmount = paymentDetails.amount ?? updated.amount;
 
           await tx.transaction.create({
             data: {
